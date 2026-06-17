@@ -1,0 +1,77 @@
+.chart-card {
+    border: 1px solid #d8e0ec;
+    border-radius: 0.5rem;
+    background: #fff;
+    padding: 1rem;
+    height: 100%;
+}
+
+.chart-card-header {
+    margin-bottom: 0.75rem;
+}
+
+.chart-card h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #243044;
+}
+
+.chart-card p {
+    margin: 0.15rem 0 0;
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.chart-empty {
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.line-chart {
+    display: block;
+    width: 100%;
+    height: 220px;
+}
+
+.line-chart-axis {
+    stroke: #d8e0ec;
+    stroke-width: 2;
+}
+
+.line-chart-line {
+    fill: none;
+    stroke: #2563eb;
+    stroke-width: 8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.line-chart-point {
+    fill: #fff;
+    stroke: #2563eb;
+    stroke-width: 5;
+}
+
+.line-chart-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.line-chart-footer strong {
+    color: #243044;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+    .line-chart {
+        height: 170px;
+    }
+
+    .line-chart-footer {
+        flex-wrap: wrap;
+    }
+}

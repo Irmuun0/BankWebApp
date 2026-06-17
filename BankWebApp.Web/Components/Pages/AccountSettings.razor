@@ -1,0 +1,174 @@
+@page "/accounts/settings"
+@attribute [Authorize(Roles = "USER,ADMIN")]
+@inject ICurrentUserService CurrentUser
+@inject IAccountService AccountService
+
+<PageTitle>Дансны тохиргоо</PageTitle>
+
+<style>
+    .status-toast {
+        animation: hide-toast 5s forwards;
+        position: fixed;
+        right: 1.5rem;
+        top: 4.5rem;
+        z-index: 2000;
+        min-width: 260px;
+    }
+
+    @@keyframes hide-toast {
+        0%, 85% {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        100% {
+            opacity: 0;
+            transform: translateY(-8px);
+            visibility: hidden;
+        }
+    }
+
+    .switch-button {
+        align-items: center;
+        background: #d6d6d6;
+        border: 0;
+        border-radius: 999px;
+        display: inline-flex;
+        height: 28px;
+        padding: 3px;
+        width: 52px;
+    }
+
+    .switch-button.is-on {
+        background: #0aa31f;
+        justify-content: flex-end;
+    }
+
+    .switch-button.is-off {
+        justify-content: flex-start;
+    }
+
+    .switch-knob {
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+        display: block;
+        height: 22px;
+        width: 22px;
+    }
+</style>
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger status-toast" role="alert">@Error</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success status-toast" role="alert">@Success</div>
+}
+
+<div class="mb-3">
+    <a class="btn btn-outline-secondary" href="/accounts">Буцах</a>
+</div>
+
+<h1>Дансны тохиргоо</h1>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-warning" role="alert">@errorMessage</div>
+}
+else
+{
+    <div class="row g-4">
+        <section class="col-12 col-lg-6">
+            <h2 class="h4">Идэвхтэй</h2>
+            @if (activeAccounts.Count == 0)
+            {
+                <p>Энэ ангилалд данс байхгүй байна.</p>
+            }
+            else
+            {
+                <div class="d-grid gap-3">
+                    @foreach (var account in activeAccounts)
+                    {
+                        @AccountCard(account, false)
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="col-12 col-lg-6">
+            <h2 class="h4">Идэвхгүй</h2>
+            @if (inactiveAccounts.Count == 0)
+            {
+                <p>Энэ ангилалд данс байхгүй байна.</p>
+            }
+            else
+            {
+                <div class="d-grid gap-3">
+                    @foreach (var account in inactiveAccounts)
+                    {
+                        @AccountCard(account, true)
+                    }
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Success { get; set; }
+
+    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> activeAccounts = [];
+    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> inactiveAccounts = [];
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = CurrentUser.UserId;
+        if (userId is null)
+        {
+            errorMessage = "Та нэвтрээгүй байна.";
+            isLoading = false;
+            return;
+        }
+
+        var accounts = await AccountService.GetMyAccountsAsync(userId.Value);
+        activeAccounts = accounts.Where(account => account.IsActive).ToList();
+        inactiveAccounts = accounts.Where(account => !account.IsActive).ToList();
+        isLoading = false;
+    }
+
+    private RenderFragment AccountCard(BankWebApp.Web.DTOs.Accounts.AccountDto account, bool nextStatus) => @<div class="border rounded p-3">
+        <div class="fw-semibold mb-2">@account.AccountNumber</div>
+        <div>@DisplayAccountType(account.AccountType) · @account.Currency</div>
+        <div>Үлдэгдэл: @account.Balance.ToString("N2")</div>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <span>Төлөв</span>
+            <form method="post" action="/accounts/toggle-status" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="AccountId" value="@account.Id" />
+                <input type="hidden" name="IsActive" value="@(nextStatus ? "true" : "false")" />
+                <span class="@(account.IsActive ? "text-success" : "text-muted")">@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</span>
+                <button class="switch-button @(account.IsActive ? "is-on" : "is-off")" type="submit" title="Төлөв өөрчлөх">
+                    <span class="switch-knob"></span>
+                </button>
+            </form>
+        </div>
+    </div>;
+
+    private static string DisplayAccountType(string accountType)
+    {
+        return accountType == "CHECKING" ? "Харилцах" : accountType;
+    }
+}

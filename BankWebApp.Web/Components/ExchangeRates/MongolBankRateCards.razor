@@ -1,0 +1,156 @@
+@using BankWebApp.Web.Helpers
+@rendermode InteractiveServer
+@inject IExchangeRateService ExchangeRateService
+
+<section class="mt-4 w-100" style="max-width: 960px;">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h2 class="h6 mb-0">Монголбанкны ханш</h2>
+        @if (rateDate is not null)
+        {
+            <span class="small text-muted">
+                @if (IsRateDateStale)
+                {
+                    <span class="rate-warning-tooltip" tabindex="0" aria-label="@StaleRateMessage">
+                        <span class="rate-warning-icon" aria-hidden="true">!</span>
+                        <span class="rate-warning-message" role="tooltip">@StaleRateMessage</span>
+                    </span>
+                }
+                Сүүлд нийтлэгдсэн: @rateDate.Value.ToString("yyyy-MM-dd")
+            </span>
+        }
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="small text-muted">Валютын ханш уншиж байна...</div>
+    }
+    else if (rates.Count == 0)
+    {
+        <div class="small text-muted">Валютын ханш одоогоор татагдсангүй.</div>
+    }
+    else
+    {
+        <div class="row g-2">
+            @foreach (var rate in rates)
+            {
+                <div class="col-6 col-md-3 col-lg-2">
+                    @if (rate.CurrencyCode == "USD" && usdBuyQuote is not null && UsdSellRate is not null)
+                    {
+                        <button class="rate-card-button border rounded p-2 bg-white h-100 w-100 text-start"
+                                type="button"
+                                @onclick="ToggleUsdDetails"
+                                aria-expanded="@showUsdDetails">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div class="fw-semibold">USD</div>
+                                <span class="small text-muted">Дэлгэрэнгүй</span>
+                            </div>
+                            <div class="small text-muted mt-1">Авах</div>
+                            <div>@usdBuyQuote.Rate.ToString("N0") MNT</div>
+                            <div class="small text-muted mt-1">Зарах</div>
+                            <div>@UsdSellRate.Value.ToString("N0") MNT</div>
+                        </button>
+                    }
+                    else
+                    {
+                        <div class="border rounded p-2 bg-white h-100">
+                            <div class="fw-semibold">@rate.CurrencyCode</div>
+                            <div class="small text-muted">@GetRateUnitLabel(rate.CurrencyCode)</div>
+                            <div>@rate.MntRate.ToString("N2") MNT</div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+    }
+
+    @if (showUsdDetails && usdOfficialRate is not null)
+    {
+        <div class="rate-modal-backdrop" @onclick="CloseUsdDetails">
+            <div class="rate-modal-card" @onclick:stopPropagation>
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div>
+                        <div class="h5 mb-1">USD дэлгэрэнгүй мэдээлэл</div>
+                        <div class="small text-muted">Монголбанкны албан ханш болон системийн идэвхтэй ханш</div>
+                    </div>
+                    <button class="btn-close" type="button" aria-label="Хаах" @onclick="CloseUsdDetails"></button>
+                </div>
+
+                <div class="row g-2 mt-3">
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="small text-muted">Албан ханш</div>
+                            <div class="fw-semibold">1 USD = @usdOfficialRate.MntRate.ToString("N2") MNT</div>
+                            <div class="small text-muted">@usdOfficialRate.RateDate?.ToString("yyyy-MM-dd")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="small text-muted">Авах</div>
+                            <div class="fw-semibold">1 USD = @usdBuyQuote?.Rate.ToString("N0") MNT</div>
+                            <div class="small text-muted">USD → MNT</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-3 h-100">
+                            <div class="small text-muted">Зарах</div>
+                            <div class="fw-semibold">1 USD = @UsdSellRate?.ToString("N0") MNT</div>
+                            <div class="small text-muted">MNT → USD</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="small text-muted mt-3">
+                    Эх сурвалж: @(usdBuyQuote?.Source ?? "MNB_API")
+                </div>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    private static readonly string[] VisibleCurrencies = ["USD", "EUR", "JPY", "CHF", "GBP", "HKD"];
+    private static readonly HashSet<string> VisibleCurrencySet = VisibleCurrencies.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private IReadOnlyList<BankWebApp.Web.DTOs.ExchangeRates.MongolBankExchangeRateDto> rates = [];
+    private BankWebApp.Web.DTOs.ExchangeRates.MongolBankExchangeRateDto? usdOfficialRate;
+    private BankWebApp.Web.DTOs.ExchangeRates.ExchangeRateQuoteDto? usdBuyQuote;
+    private BankWebApp.Web.DTOs.ExchangeRates.ExchangeRateQuoteDto? usdSellQuote;
+    private DateOnly? rateDate;
+    private bool isLoading = true;
+    private bool showUsdDetails;
+    private const string StaleRateMessage = "Монголбанк өнөөдрийн ханшийг хараахан нийтлээгүй байна. Хамгийн сүүлд нийтлэгдсэн ханшийг харуулж байна.";
+    private bool IsRateDateStale => rateDate is not null && rateDate < MongoliaClock.Today;
+    private decimal? UsdSellRate => usdSellQuote?.CustomerMntPerUsdRate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var allRates = await ExchangeRateService.GetMongolBankMntRatesAsync();
+        rates = allRates
+            .Where(rate => VisibleCurrencySet.Contains(rate.CurrencyCode))
+            .OrderBy(rate => Array.IndexOf(VisibleCurrencies, rate.CurrencyCode))
+            .ToList();
+        usdOfficialRate = rates.FirstOrDefault(rate => rate.CurrencyCode == "USD");
+        usdBuyQuote = await ExchangeRateService.GetExchangeRateQuoteAsync("USD", "MNT");
+        usdSellQuote = await ExchangeRateService.GetExchangeRateQuoteAsync("MNT", "USD");
+        rateDate = rates.FirstOrDefault()?.RateDate;
+        isLoading = false;
+    }
+
+    private void ToggleUsdDetails()
+    {
+        showUsdDetails = !showUsdDetails;
+    }
+
+    private void CloseUsdDetails()
+    {
+        showUsdDetails = false;
+    }
+
+    private static string GetRateUnitLabel(string currencyCode)
+    {
+        return currencyCode is "XAU" or "XAG"
+            ? "1 грамм ="
+            : $"1 {currencyCode} =";
+    }
+}

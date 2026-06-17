@@ -1,0 +1,307 @@
+@page "/admin/audit-logs"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+
+<PageTitle>Админ - Audit log</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1>Audit log</h1>
+        <div class="text-muted small">Security event, admin action, ханшийн өөрчлөлт, fraud detection/action-уудыг нэг дор харуулна.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+<form class="row g-2 mb-3" method="get" action="/admin/audit-logs">
+    <div class="col-12 col-md-3">
+        <label class="form-label small text-muted">Эх сурвалж</label>
+        <select class="form-select" name="source">
+            <option value="" selected="@IsSelectedSource("ALL")">Бүгд</option>
+            <option value="SECURITY" selected="@IsSelectedSource("SECURITY")">Security event</option>
+            <option value="ADMIN" selected="@IsSelectedSource("ADMIN")">Admin action</option>
+            <option value="RATE" selected="@IsSelectedSource("RATE")">Ханшийн өөрчлөлт</option>
+            <option value="FRAUD" selected="@IsSelectedSource("FRAUD")">Fraud detection/action</option>
+        </select>
+    </div>
+    <div class="col-12 col-md-3">
+        <label class="form-label small text-muted">Хайх</label>
+        <input class="form-control" name="search" value="@Search" placeholder="Action, хэрэглэгч, IP, тайлбар..." />
+    </div>
+    <div class="col-6 col-md-2">
+        <label class="form-label small text-muted">Эхлэх өдөр</label>
+        <input class="form-control" name="startDate" type="date" value="@FormatDate(StartDate)" />
+    </div>
+    <div class="col-6 col-md-2">
+        <label class="form-label small text-muted">Дуусах өдөр</label>
+        <input class="form-control" name="endDate" type="date" value="@FormatDate(EndDate)" />
+    </div>
+    <div class="col-12 col-md-2 d-flex align-items-end gap-2">
+        <button class="btn btn-outline-primary" type="submit">Шүүх</button>
+        <a class="btn btn-outline-secondary" href="/admin/audit-logs">Цэвэрлэх</a>
+    </div>
+</form>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (auditLogs.Items.Count == 0)
+{
+    <div class="alert alert-light border">Audit log олдсонгүй.</div>
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <div class="small text-muted">Нийт: @auditLogs.TotalItems.ToString("N0") мөр</div>
+        <div class="small text-muted">Page @auditLogs.Page / @auditLogs.TotalPages</div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Огноо цаг</th>
+                    <th>Эх сурвалж</th>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Target</th>
+                    <th>Summary</th>
+                    <th>Severity</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in auditLogs.Items)
+                {
+                    <tr>
+                        <td class="text-nowrap">@item.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td><span class="badge @SourceBadgeClass(item.Source)">@item.SourceLabel</span></td>
+                        <td>@item.ActionLabel</td>
+                        <td>@item.ActorDisplayName</td>
+                        <td>@FormatTarget(item)</td>
+                        <td class="audit-summary">@item.Summary</td>
+                        <td><span class="badge @SeverityBadgeClass(item.Severity)">@item.Severity</span></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => OpenDetail(item)">Дэлгэрэнгүй</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <nav class="d-flex align-items-center gap-2 mt-3" aria-label="Audit pagination">
+        <a class="btn btn-sm btn-outline-secondary @(auditLogs.Page <= 1 ? "disabled" : "")" href="@BuildPageHref(auditLogs.Page - 1)">Өмнөх</a>
+        <span class="small text-muted">@auditLogs.Page / @auditLogs.TotalPages</span>
+        <a class="btn btn-sm btn-outline-secondary @(auditLogs.Page >= auditLogs.TotalPages ? "disabled" : "")" href="@BuildPageHref(auditLogs.Page + 1)">Дараах</a>
+    </nav>
+}
+
+@if (selectedLog is not null)
+{
+    <div class="audit-modal-backdrop" @onclick="CloseDetail">
+        <div class="audit-modal bg-white border rounded shadow p-4" @onclick:stopPropagation>
+            <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                <div>
+                    <div class="h4 mb-1">@selectedLog.ActionLabel</div>
+                    <div class="text-muted small">@selectedLog.SourceLabel · @selectedLog.OccurredAt.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                </div>
+                <button class="btn-close" type="button" aria-label="Хаах" @onclick="CloseDetail"></button>
+            </div>
+
+            <dl class="row">
+                <dt class="col-sm-4">Actor</dt>
+                <dd class="col-sm-8">@selectedLog.ActorDisplayName</dd>
+                <dt class="col-sm-4">Target</dt>
+                <dd class="col-sm-8">@FormatTarget(selectedLog)</dd>
+                <dt class="col-sm-4">Severity</dt>
+                <dd class="col-sm-8"><span class="badge @SeverityBadgeClass(selectedLog.Severity)">@selectedLog.Severity</span></dd>
+                @if (selectedLog.Success is not null)
+                {
+                    <dt class="col-sm-4">Success</dt>
+                    <dd class="col-sm-8">@(selectedLog.Success.Value ? "Тийм" : "Үгүй")</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(selectedLog.IpAddress))
+                {
+                    <dt class="col-sm-4">IP</dt>
+                    <dd class="col-sm-8">@selectedLog.IpAddress</dd>
+                }
+                @if (!string.IsNullOrWhiteSpace(selectedLog.UserAgent))
+                {
+                    <dt class="col-sm-4">User agent</dt>
+                    <dd class="col-sm-8 audit-pre">@selectedLog.UserAgent</dd>
+                }
+            </dl>
+
+            <div class="mb-3">
+                <div class="fw-semibold">Summary</div>
+                <div class="border rounded p-2 bg-light">@selectedLog.Summary</div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(selectedLog.Detail))
+            {
+                <div class="mb-3">
+                    <div class="fw-semibold">Detail</div>
+                    <pre class="audit-pre border rounded p-2 bg-light mb-0">@selectedLog.Detail</pre>
+                </div>
+            }
+
+            <div class="row g-2">
+                @if (!string.IsNullOrWhiteSpace(selectedLog.OldValue))
+                {
+                    <div class="col-md-6">
+                        <div class="fw-semibold">Old value</div>
+                        <pre class="audit-pre border rounded p-2 bg-light mb-0">@selectedLog.OldValue</pre>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(selectedLog.NewValue))
+                {
+                    <div class="col-md-6">
+                        <div class="fw-semibold">New value</div>
+                        <pre class="audit-pre border rounded p-2 bg-light mb-0">@selectedLog.NewValue</pre>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .audit-summary {
+        max-width: 360px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .audit-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 2100;
+        background: rgba(20, 24, 31, .42);
+        backdrop-filter: blur(5px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .audit-modal {
+        width: min(760px, 96vw);
+        max-height: 90vh;
+        overflow: auto;
+    }
+
+    .audit-pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: .86rem;
+    }
+</style>
+
+@code {
+    private AdminPagedResultDto<AdminAuditLogDto> auditLogs = new();
+    private AdminAuditLogDto? selectedLog;
+    private bool isLoading = true;
+
+    [SupplyParameterFromQuery]
+    private string? Source { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Search { get; set; }
+
+    [SupplyParameterFromQuery]
+    private DateOnly? StartDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    private DateOnly? EndDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    private int Page { get; set; } = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        auditLogs = await AdminService.GetAuditLogsAsync(Source, Search, StartDate, EndDate, Page);
+        isLoading = false;
+    }
+
+    private void OpenDetail(AdminAuditLogDto item)
+    {
+        selectedLog = item;
+    }
+
+    private void CloseDetail()
+    {
+        selectedLog = null;
+    }
+
+    private bool IsSelectedSource(string value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(Source) ? "ALL" : Source.Trim().ToUpperInvariant();
+        return normalized == value;
+    }
+
+    private static string FormatDate(DateOnly? date)
+    {
+        return date?.ToString("yyyy-MM-dd") ?? string.Empty;
+    }
+
+    private static string FormatTarget(AdminAuditLogDto item)
+    {
+        if (string.IsNullOrWhiteSpace(item.TargetType) && item.TargetId is null)
+        {
+            return "-";
+        }
+
+        return item.TargetId is null ? item.TargetType ?? "-" : $"{item.TargetType} #{item.TargetId}";
+    }
+
+    private static string SourceBadgeClass(string source)
+    {
+        return source switch
+        {
+            "SECURITY" => "text-bg-dark",
+            "ADMIN" => "text-bg-primary",
+            "RATE" => "text-bg-info",
+            "FRAUD" => "text-bg-danger",
+            _ => "text-bg-secondary"
+        };
+    }
+
+    private static string SeverityBadgeClass(string severity)
+    {
+        return severity switch
+        {
+            "WARNING" => "text-bg-warning",
+            "NOTICE" => "text-bg-info",
+            _ => "text-bg-secondary"
+        };
+    }
+
+    private string BuildPageHref(int page)
+    {
+        var query = new List<string> { $"page={page}" };
+        if (!string.IsNullOrWhiteSpace(Source))
+        {
+            query.Add($"source={Uri.EscapeDataString(Source)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            query.Add($"search={Uri.EscapeDataString(Search)}");
+        }
+
+        if (StartDate is not null)
+        {
+            query.Add($"startDate={StartDate.Value:yyyy-MM-dd}");
+        }
+
+        if (EndDate is not null)
+        {
+            query.Add($"endDate={EndDate.Value:yyyy-MM-dd}");
+        }
+
+        return $"/admin/audit-logs?{string.Join("&", query)}";
+    }
+}

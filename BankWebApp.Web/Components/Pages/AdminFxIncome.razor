@@ -1,0 +1,267 @@
+@page "/admin/fx-income"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+
+<PageTitle>Админ - FX орлогын тайлан</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1>Ханшийн зөрүүний орлогын тайлан</h1>
+        <div class="text-muted small">MNT/USD хөрвүүлэлт дээр ашигласан авах/зарах ханш болон албан ханшийн зөрүүнээс үүссэн орлого.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else
+{
+    <form class="row g-2 mb-3" method="get" action="/admin/fx-income">
+        <div class="col-12 col-md-3">
+            <label class="form-label" for="startDate">Эхлэх огноо</label>
+            <input id="startDate" class="form-control" type="date" name="startDate" value="@StartDateValue" />
+        </div>
+        <div class="col-12 col-md-3">
+            <label class="form-label" for="endDate">Дуусах огноо</label>
+            <input id="endDate" class="form-control" type="date" name="endDate" value="@EndDateValue" />
+        </div>
+        <div class="col-12 col-md-4">
+            <label class="form-label" for="search">Хайх</label>
+            <input id="search" class="form-control" name="search" value="@Search" placeholder="Гүйлгээ ID, данс, валют, төрөл..." />
+        </div>
+        <div class="col-12 col-md-2 d-flex align-items-end gap-2">
+            <button class="btn btn-outline-primary" type="submit">Хайх</button>
+            <a class="btn btn-outline-secondary" href="/admin/fx-income">Цэвэрлэх</a>
+        </div>
+    </form>
+
+    <div class="row g-3 mb-4">
+        <SummaryCard Title="Нийт FX орлого" Value="@($"{report.Summary.TotalIncomeMnt:N2} MNT")" />
+        <SummaryCard Title="Авах ханшийн орлого" Value="@($"{report.Summary.BuyIncomeMnt:N2} MNT")" />
+        <SummaryCard Title="Зарах ханшийн орлого" Value="@($"{report.Summary.SellIncomeMnt:N2} MNT")" />
+        <SummaryCard Title="Дундаж spread" Value="@($"{report.Summary.AverageSpreadMarginMntPerUsd:N4} MNT/USD")" />
+        <SummaryCard Title="Гүйлгээний тоо" Value="@report.Summary.TotalItems.ToString("N0")" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-lg-4">
+            <DonutChart Title="Орлогын бүтэц"
+                        Subtitle="Авах болон зарах ханшийн spread"
+                        Unit="MNT"
+                        Items="@IncomeTypeChart" />
+        </div>
+        <div class="col-12 col-lg-4">
+            <BarChart Title="Чиглэлээр орлого"
+                      Subtitle="Валютын хөрвүүлэлтийн чиглэл"
+                      Unit="MNT"
+                      Items="@IncomeByDirectionChart" />
+        </div>
+        <div class="col-12 col-lg-4">
+            <LineChart Title="Өдрийн орлогын trend"
+                       Subtitle="Одоогийн шүүлтийн хүрээнд"
+                       Unit="MNT"
+                       Items="@DailyIncomeTrendChart" />
+        </div>
+    </div>
+
+    <div class="mb-3 text-muted small">
+        Тайлангийн хугацаа: @report.Summary.StartDate.ToString("yyyy-MM-dd") - @report.Summary.EndDate.ToString("yyyy-MM-dd")
+    </div>
+}
+
+@if (!isLoading && report.Logs.Items.Count == 0)
+{
+    <div class="alert alert-light border">Сонгосон нөхцөлд ханшийн зөрүүний орлого олдсонгүй.</div>
+}
+else if (!isLoading)
+{
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Огноо</th>
+                    <th>Гүйлгээ</th>
+                    <th>Чиглэл</th>
+                    <th>Илгээсэн</th>
+                    <th>Хүлээн авсан</th>
+                    <th>Албан ханш</th>
+                    <th>Ашигласан ханш</th>
+                    <th>Spread</th>
+                    <th>Орлого</th>
+                    <th>Төрөл</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in report.Logs.Items)
+                {
+                    <tr>
+                        <td>
+                            <div>@item.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                            <div class="small text-muted">Ханш: @item.RateDate.ToString("yyyy-MM-dd")</div>
+                        </td>
+                        <td>
+                            <div>#@item.TransactionId</div>
+                            <div class="small text-muted">@item.FromAccountNumber - @item.ToAccountNumber</div>
+                        </td>
+                        <td>@item.FromCurrency - @item.ToCurrency</td>
+                        <td>@item.SourceAmount.ToString("N2") @item.FromCurrency</td>
+                        <td>@item.CreditedAmount.ToString("N2") @item.ToCurrency</td>
+                        <td>@item.OfficialRateMntPerUsd.ToString("N4")</td>
+                        <td>@item.CustomerRateMntPerUsd.ToString("N4")</td>
+                        <td>@item.SpreadMarginMntPerUsd.ToString("N4")</td>
+                        <td class="fw-semibold">@item.IncomeAmountMnt.ToString("N2") MNT</td>
+                        <td><span class="badge text-bg-light border">@DisplayIncomeType(item.IncomeType)</span></td>
+                    </tr>
+                    @if (!string.IsNullOrWhiteSpace(item.Description))
+                    {
+                        <tr>
+                            <td colspan="10" class="small text-muted">
+                                <span class="fw-semibold">Гүйлгээний утга:</span> @item.Description
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (report.Logs.TotalPages > 1)
+    {
+        <nav class="d-flex align-items-center gap-2 mt-3" aria-label="FX income pagination">
+            <a class="btn btn-sm btn-outline-secondary @(report.Logs.Page <= 1 ? "disabled" : "")" href="@BuildHref(report.Logs.Page - 1)">Өмнөх</a>
+            <span class="small text-muted">@report.Logs.Page / @report.Logs.TotalPages</span>
+            <a class="btn btn-sm btn-outline-secondary @(report.Logs.Page >= report.Logs.TotalPages ? "disabled" : "")" href="@BuildHref(report.Logs.Page + 1)">Дараах</a>
+        </nav>
+    }
+}
+
+@code {
+    private AdminFxIncomeReportDto report = new();
+    private bool isLoading = true;
+    private DateOnly effectiveStartDate;
+    private DateOnly effectiveEndDate;
+
+    [SupplyParameterFromQuery]
+    private string? Search { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? StartDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? EndDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    private int Page { get; set; } = 1;
+
+    private string StartDateValue => effectiveStartDate.ToString("yyyy-MM-dd");
+
+    private string EndDateValue => effectiveEndDate.ToString("yyyy-MM-dd");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = MongoliaClock.Today;
+        effectiveStartDate = TryParseDate(StartDate) ?? new DateOnly(today.Year, today.Month, 1);
+        effectiveEndDate = TryParseDate(EndDate) ?? today;
+
+        report = await AdminService.GetFxIncomeReportAsync(effectiveStartDate, effectiveEndDate, Search, Page);
+        effectiveStartDate = report.Summary.StartDate;
+        effectiveEndDate = report.Summary.EndDate;
+        isLoading = false;
+    }
+
+    private string BuildHref(int page)
+    {
+        var query = new List<string>
+        {
+            $"page={page}",
+            $"startDate={Uri.EscapeDataString(StartDateValue)}",
+            $"endDate={Uri.EscapeDataString(EndDateValue)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            query.Add($"search={Uri.EscapeDataString(Search)}");
+        }
+
+        return $"/admin/fx-income?{string.Join("&", query)}";
+    }
+
+    private static DateOnly? TryParseDate(string? value)
+    {
+        return DateOnly.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    private static string DisplayIncomeType(string incomeType)
+    {
+        return incomeType switch
+        {
+            "BUY_SPREAD" => "Авах spread",
+            "SELL_SPREAD" => "Зарах spread",
+            _ => incomeType
+        };
+    }
+
+    private IReadOnlyList<ChartDataPoint> IncomeTypeChart =>
+    [
+        new() { Label = "Авах spread", Value = report.Summary.BuyIncomeMnt, Color = "#2563eb" },
+        new() { Label = "Зарах spread", Value = report.Summary.SellIncomeMnt, Color = "#16a34a" }
+    ];
+
+    private IReadOnlyList<ChartDataPoint> IncomeByDirectionChart => report.Logs.Items
+        .GroupBy(item => $"{item.FromCurrency} → {item.ToCurrency}")
+        .OrderByDescending(group => group.Sum(item => item.IncomeAmountMnt))
+        .Select((group, index) => new ChartDataPoint
+        {
+            Label = group.Key,
+            Value = group.Sum(item => item.IncomeAmountMnt),
+            Color = ChartColors[index % ChartColors.Length]
+        })
+        .ToList();
+
+    private IReadOnlyList<ChartDataPoint> DailyIncomeTrendChart
+    {
+        get
+        {
+            var grouped = report.Logs.Items
+                .GroupBy(item => DateOnly.FromDateTime(item.CreatedAt))
+                .ToDictionary(group => group.Key, group => group.Sum(item => item.IncomeAmountMnt));
+
+            return EnumerateReportDays()
+                .Select(day => new ChartDataPoint
+                {
+                    Label = day.ToString("MM-dd"),
+                    Value = grouped.TryGetValue(day, out var value) ? value : 0,
+                    Color = "#2563eb"
+                })
+                .ToList();
+        }
+    }
+
+    private IEnumerable<DateOnly> EnumerateReportDays()
+    {
+        var totalDays = Math.Max(1, effectiveEndDate.DayNumber - effectiveStartDate.DayNumber + 1);
+        var step = Math.Max(1, totalDays / 14);
+
+        for (var day = effectiveStartDate; day <= effectiveEndDate; day = day.AddDays(step))
+        {
+            yield return day;
+        }
+
+        if (effectiveEndDate > effectiveStartDate)
+        {
+            yield return effectiveEndDate;
+        }
+    }
+
+    private static readonly string[] ChartColors =
+    [
+        "#2563eb",
+        "#16a34a",
+        "#f59e0b",
+        "#7c3aed",
+        "#0891b2",
+        "#dc2626"
+    ];
+}

@@ -1,0 +1,63 @@
+<section class="chart-card">
+    <div class="chart-card-header">
+        <div>
+            <h3>@Title</h3>
+            @if (!string.IsNullOrWhiteSpace(Subtitle))
+            {
+                <p>@Subtitle</p>
+            }
+        </div>
+    </div>
+
+    @if (VisibleItems.Count == 0)
+    {
+        <div class="chart-empty">Харуулах өгөгдөл алга.</div>
+    }
+    else
+    {
+        <div class="bar-chart">
+            @foreach (var item in VisibleItems)
+            {
+                <div class="bar-chart-row">
+                    <div class="bar-chart-label">@item.Label</div>
+                    <div class="bar-chart-track" aria-label="@($"{item.Label}: {FormatValue(item.Value)}")">
+                        <div class="bar-chart-fill" style="@BuildFillStyle(item)"></div>
+                    </div>
+                    <div class="bar-chart-value">@FormatValue(item.Value)</div>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Subtitle { get; set; }
+
+    [Parameter]
+    public string? Unit { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<ChartDataPoint> Items { get; set; } = [];
+
+    private IReadOnlyList<ChartDataPoint> VisibleItems => Items
+        .Where(item => item.Value > 0)
+        .ToList();
+
+    private decimal MaxValue => VisibleItems.Count == 0 ? 0 : VisibleItems.Max(item => item.Value);
+
+    private string BuildFillStyle(ChartDataPoint item)
+    {
+        var width = MaxValue <= 0 ? 0 : Math.Max(4, (double)(item.Value / MaxValue) * 100);
+        return $"width: {width:0.##}%; background: {item.Color};";
+    }
+
+    private string FormatValue(decimal value)
+    {
+        var formatted = value % 1 == 0 ? value.ToString("N0") : value.ToString("N2");
+        return string.IsNullOrWhiteSpace(Unit) ? formatted : $"{formatted} {Unit}";
+    }
+}

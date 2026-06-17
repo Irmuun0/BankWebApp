@@ -1,0 +1,238 @@
+@page "/admin/suspicious-transactions"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Админ - Сэжигтэй гүйлгээ</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Сэжигтэй гүйлгээ</h1>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger" role="alert">@Error</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success" role="alert">@Success</div>
+}
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else
+{
+    <form class="row g-2 mb-3" method="get" action="/admin/suspicious-transactions">
+        <div class="col-12 col-md-4">
+            <input class="form-control" name="search" value="@Search" placeholder="Данс, шалтгаан, тэмдэглэл хайх" />
+        </div>
+        <div class="col-12 col-md-3">
+            <select class="form-select" name="reviewStatus">
+                <option value="">Бүх review төлөв</option>
+                @foreach (var status in ReviewStatusHelper.AllowedStatuses)
+                {
+                    <option value="@status" selected="@(ReviewStatus == status)">@ReviewStatusHelper.GetLabel(status)</option>
+                }
+            </select>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary" type="submit">Хайх</button>
+        </div>
+        <div class="col-auto">
+            <a class="btn btn-outline-secondary" href="/admin/suspicious-transactions">Цэвэрлэх</a>
+        </div>
+    </form>
+}
+
+@if (!isLoading && suspiciousTransactions.Items.Count == 0)
+{
+    <p>Сэжигтэй гүйлгээ олдсонгүй.</p>
+}
+else if (!isLoading)
+{
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Огноо</th>
+                <th>Илгээгч</th>
+                <th>Хүлээн авагч</th>
+                <th>Дүн</th>
+                <th>Risk score</th>
+                <th>Review төлөв</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in suspiciousTransactions.Items)
+            {
+                <tr>
+                    <td>@item.TransactionId</td>
+                    <td>@item.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@item.FromAccountNumber</td>
+                    <td>@item.ToAccountNumber</td>
+                    <td>@item.Amount.ToString("N2") @item.SourceCurrency</td>
+                    <td>@item.RiskScore.ToString("N2")</td>
+                    <td>@item.ReviewStatusLabel</td>
+                    <td class="text-end">
+                        <a class="btn btn-sm btn-outline-primary" href="@BuildDetailHref(item.TransactionId)">Дэлгэрэнгүй</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <AdminPager BasePath="/admin/suspicious-transactions" Page="@suspiciousTransactions.Page" TotalPages="@suspiciousTransactions.TotalPages" Search="@Search" ReviewStatus="@ReviewStatus" />
+}
+
+@if (selectedDetail is not null)
+{
+    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1050;">
+        <a class="position-absolute top-0 start-0 w-100 h-100 d-block text-decoration-none"
+           href="@CloseModalUrl"
+           style="background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(7px);"></a>
+
+        <div class="position-relative bg-white border rounded shadow mx-auto my-4 p-4" style="max-width: 920px; max-height: calc(100vh - 3rem); overflow-y: auto;">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h2 class="h4 mb-1">Сэжигтэй гүйлгээ #@selectedDetail.TransactionId</h2>
+                    <div class="text-muted small">@selectedDetail.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" href="@CloseModalUrl">Хаах</a>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Илгээгч</dt>
+                        <dd class="col-sm-7">@selectedDetail.FromAccountNumber</dd>
+                        <dt class="col-sm-5">Хүлээн авагч</dt>
+                        <dd class="col-sm-7">@selectedDetail.ToAccountNumber</dd>
+                        <dt class="col-sm-5">Гүйлгээний дүн</dt>
+                        <dd class="col-sm-7">@selectedDetail.Amount.ToString("N2") @selectedDetail.SourceCurrency</dd>
+                        <dt class="col-sm-5">Хүлээн авсан дүн</dt>
+                        <dd class="col-sm-7">@selectedDetail.CreditedAmount.ToString("N2") @selectedDetail.TargetCurrency</dd>
+                        <dt class="col-sm-5">Risk score</dt>
+                        <dd class="col-sm-7">@selectedDetail.RiskScore.ToString("N2")</dd>
+                        <dt class="col-sm-5">Review</dt>
+                        <dd class="col-sm-7">@selectedDetail.ReviewStatusLabel</dd>
+                        <dt class="col-sm-5">Review хийсэн</dt>
+                        <dd class="col-sm-7">@(selectedDetail.ReviewedByUsername ?? "-")</dd>
+                        <dt class="col-sm-5">Review огноо</dt>
+                        <dd class="col-sm-7">@(selectedDetail.ReviewedAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</dd>
+                    </dl>
+                </div>
+
+                <div class="col-12 col-lg-6">
+                    <div class="fw-semibold">Сэжигтэй шалтгаан</div>
+                    <p>@selectedDetail.SuspiciousReason</p>
+
+                    <div class="fw-semibold">AI тайлбар</div>
+                    <p>@selectedDetail.AiExplanation</p>
+                </div>
+            </div>
+
+            <form class="border rounded p-3 mt-3" method="post" action="/admin/suspicious-transactions/review">
+                <input type="hidden" name="TransactionId" value="@selectedDetail.TransactionId" />
+                <input type="hidden" name="ExpectedUpdatedAtTicks" value="@selectedDetail.UpdatedAt.Ticks" />
+                <input type="hidden" name="ReturnUrl" value="@CurrentPageWithDetail" />
+
+                <div class="mb-3">
+                    <label class="form-label" for="reviewStatus">Review төлөв</label>
+                    <select class="form-select" id="reviewStatus" name="ReviewStatus">
+                        @foreach (var status in ReviewStatusHelper.AllowedStatuses)
+                        {
+                            <option value="@status" selected="@(selectedDetail.ReviewStatus == status)">@ReviewStatusHelper.GetLabel(status)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="reviewNote">Review тэмдэглэл</label>
+                    <textarea class="form-control" id="reviewNote" name="ReviewNote" rows="4">@selectedDetail.ReviewNote</textarea>
+                </div>
+
+                <button class="btn btn-primary" type="submit">Хадгалах</button>
+            </form>
+        </div>
+    </div>
+}
+
+@code {
+    private AdminPagedResultDto<AdminSuspiciousTransactionDto> suspiciousTransactions = new();
+    private AdminSuspiciousTransactionDto? selectedDetail;
+    private bool isLoading = true;
+
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Success { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Search { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReviewStatus { get; set; }
+
+    [SupplyParameterFromQuery]
+    private int Page { get; set; } = 1;
+
+    [SupplyParameterFromQuery(Name = "detail")]
+    private long? DetailTransactionId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        suspiciousTransactions = await AdminService.GetSuspiciousTransactionsAsync(Search, ReviewStatus, Page);
+        if (DetailTransactionId is not null)
+        {
+            selectedDetail = await AdminService.GetSuspiciousTransactionDetailAsync(DetailTransactionId.Value);
+        }
+
+        isLoading = false;
+    }
+
+    private string CurrentPageUrl => "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+
+    private string CurrentPageWithDetail => BuildDetailHref(selectedDetail?.TransactionId ?? DetailTransactionId ?? 0);
+
+    private string CloseModalUrl => BuildListHref();
+
+    private string BuildDetailHref(long transactionId)
+    {
+        var query = BuildQuery([("detail", transactionId.ToString())]);
+        return $"/admin/suspicious-transactions?{query}";
+    }
+
+    private string BuildListHref()
+    {
+        var query = BuildQuery([]);
+        return string.IsNullOrWhiteSpace(query) ? "/admin/suspicious-transactions" : $"/admin/suspicious-transactions?{query}";
+    }
+
+    private string BuildQuery(IEnumerable<(string Key, string Value)> extra)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            query.Add($"search={Uri.EscapeDataString(Search)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ReviewStatus))
+        {
+            query.Add($"reviewStatus={Uri.EscapeDataString(ReviewStatus)}");
+        }
+
+        if (Page > 1)
+        {
+            query.Add($"page={Page}");
+        }
+
+        query.AddRange(extra.Select(item => $"{item.Key}={Uri.EscapeDataString(item.Value)}"));
+        return string.Join("&", query);
+    }
+}

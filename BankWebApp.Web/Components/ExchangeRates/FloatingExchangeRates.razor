@@ -1,0 +1,167 @@
+@using BankWebApp.Web.DTOs.ExchangeRates
+@rendermode InteractiveServer
+@inject IExchangeRateService ExchangeRateService
+
+<div class="floating-rate-widget">
+    @if (showPanel)
+    {
+        <section class="floating-rate-panel" aria-label="Ханшийн мэдээлэл">
+            <div class="floating-rate-panel-header">
+                <div>
+                    <div class="floating-rate-title">Ханшийн мэдээлэл</div>
+                    <div class="floating-rate-subtitle">Монголбанк болон банкны авах/зарах ханш</div>
+                </div>
+                <button class="floating-rate-close" type="button" aria-label="Хаах" @onclick="TogglePanel">×</button>
+            </div>
+
+            @if (isLoading)
+            {
+                <div class="floating-rate-empty">Ханш уншиж байна...</div>
+            }
+            else if (rates.Count == 0)
+            {
+                <div class="floating-rate-empty">Ханшийн мэдээлэл олдсонгүй.</div>
+            }
+            else
+            {
+                <div class="floating-rate-table-wrap">
+                    <table class="floating-rate-table">
+                        <colgroup>
+                            <col class="floating-rate-col-name" />
+                            <col class="floating-rate-col-code" />
+                            <col class="floating-rate-col-official" />
+                            <col class="floating-rate-col-buy" />
+                            <col class="floating-rate-col-sell" />
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th colspan="2">@RateDateLabel</th>
+                                <th>Монголбанк</th>
+                                <th colspan="2">Бэлэн бус</th>
+                            </tr>
+                            <tr>
+                                <th>Валют</th>
+                                <th></th>
+                                <th></th>
+                                <th>Авах</th>
+                                <th>Зарах</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var rate in rates)
+                            {
+                                <tr>
+                                    <td>
+                                        <span class="floating-rate-currency">
+                                            <span class="floating-rate-flag flag-@rate.CurrencyCode.ToLowerInvariant()" aria-hidden="true"></span>
+                                            <span>@GetCurrencyName(rate.CurrencyCode)</span>
+                                        </span>
+                                    </td>
+                                    <td class="floating-rate-code">@rate.CurrencyCode</td>
+                                    <td class="floating-rate-number">@FormatOfficialRate(rate)</td>
+                                    <td class="floating-rate-number">@(rate.CurrencyCode == "USD" ? UsdBuyRateText : string.Empty)</td>
+                                    <td class="floating-rate-number">@(rate.CurrencyCode == "USD" ? UsdSellRateText : string.Empty)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    }
+
+    <button class="floating-rate-action floating-rate-money @(isExpanded ? "show" : "")"
+            type="button"
+            aria-label="Ханш харах"
+            title="Ханш харах"
+            @onclick="TogglePanel">
+        💵
+    </button>
+
+    <button class="floating-rate-action floating-rate-main"
+            type="button"
+            aria-expanded="@isExpanded"
+            aria-label="Ханшийн товч нээх"
+            title="Ханшийн товч"
+            @onclick="ToggleExpanded">
+        ↑
+    </button>
+</div>
+
+@code {
+    private static readonly string[] VisibleCurrencies = ["USD", "EUR", "JPY", "CHF", "GBP", "HKD", "CNY", "KRW", "CAD", "AUD", "SGD", "NZD", "XAU", "XAG"];
+    private static readonly HashSet<string> VisibleCurrencySet = VisibleCurrencies.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private IReadOnlyList<MongolBankExchangeRateDto> rates = [];
+    private ExchangeRateQuoteDto? usdBuyQuote;
+    private ExchangeRateQuoteDto? usdSellQuote;
+    private DateOnly? rateDate;
+    private bool isLoading = true;
+    private bool isExpanded;
+    private bool showPanel;
+
+    private string RateDateLabel => rateDate?.ToString("yyyy.MM.dd") ?? "Огноо";
+
+    private string UsdBuyRateText => usdBuyQuote is null ? string.Empty : usdBuyQuote.Rate.ToString("N0");
+
+    private string UsdSellRateText => usdSellQuote?.CustomerMntPerUsdRate?.ToString("N0") ?? string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var allRates = await ExchangeRateService.GetMongolBankMntRatesAsync();
+        rates = allRates
+            .Where(rate => VisibleCurrencySet.Contains(rate.CurrencyCode))
+            .OrderBy(rate => Array.IndexOf(VisibleCurrencies, rate.CurrencyCode))
+            .ToList();
+        rateDate = rates.FirstOrDefault()?.RateDate;
+        usdBuyQuote = await ExchangeRateService.GetExchangeRateQuoteAsync("USD", "MNT");
+        usdSellQuote = await ExchangeRateService.GetExchangeRateQuoteAsync("MNT", "USD");
+        isLoading = false;
+    }
+
+    private void ToggleExpanded()
+    {
+        isExpanded = !isExpanded;
+        if (!isExpanded)
+        {
+            showPanel = false;
+        }
+    }
+
+    private void TogglePanel()
+    {
+        if (!isExpanded)
+        {
+            isExpanded = true;
+        }
+
+        showPanel = !showPanel;
+    }
+
+    private static string FormatOfficialRate(MongolBankExchangeRateDto rate)
+    {
+        return rate.MntRate.ToString(rate.CurrencyCode is "XAU" or "XAG" ? "N2" : "N2");
+    }
+
+    private static string GetCurrencyName(string currencyCode)
+    {
+        return currencyCode switch
+        {
+            "USD" => "АМЕРИК ДОЛЛАР",
+            "EUR" => "ЕВРО",
+            "JPY" => "ЯПОН ИЕН",
+            "CHF" => "ШВЕЙЦАР ФРАНК",
+            "GBP" => "АНГЛИ ФУНТ",
+            "HKD" => "ХОНКОНГ ДОЛЛАР",
+            "CNY" => "ХЯТАД ЮАНЬ",
+            "KRW" => "СОЛОНГОС ВОН",
+            "CAD" => "КАНАД ДОЛЛАР",
+            "AUD" => "АВСТРАЛИ ДОЛЛАР",
+            "SGD" => "СИНГАПУР ДОЛЛАР",
+            "NZD" => "ШИНЭ ЗЕЛАНД ДОЛЛАР",
+            "XAU" => "АЛТ",
+            "XAG" => "МӨНГӨ",
+            _ => currencyCode
+        };
+    }
+}

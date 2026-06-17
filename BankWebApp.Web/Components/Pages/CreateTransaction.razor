@@ -1,0 +1,478 @@
+@page "/transactions/create"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "USER,ADMIN")]
+@using System.Globalization
+@inject ICurrentUserService CurrentUser
+@inject IAccountService AccountService
+@inject ITransactionService TransactionService
+@inject IExchangeRateService ExchangeRateService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Гүйлгээ хийх</PageTitle>
+
+<div class="mb-3">
+    <a class="btn btn-outline-secondary" href="/dashboard">Буцах</a>
+</div>
+
+<h1>Гүйлгээ хийх</h1>
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger" role="alert">@Error</div>
+}
+
+@if (showReceipt && receipt is not null)
+{
+    <div class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center"
+         style="background: rgba(0,0,0,.35); z-index: 1050;"
+         @onclick="DismissReceipt">
+        <div class="bg-white border rounded p-4 shadow" style="width: min(460px, 92vw);" @onclick:stopPropagation>
+            <h2 class="h5 mb-3">Гүйлгээ амжилттай боллоо</h2>
+
+            <dl class="row mb-3">
+                <dt class="col-sm-5">Шилжүүлсэн дүн</dt>
+                <dd class="col-sm-7">@receipt.Amount.ToString("N2") @receipt.SourceCurrency</dd>
+
+                <dt class="col-sm-5">Огноо цаг</dt>
+                <dd class="col-sm-7">@receipt.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+
+                <dt class="col-sm-5">Үлдсэн үлдэгдэл</dt>
+                <dd class="col-sm-7">@receipt.SenderRemainingBalance.ToString("N2") @receipt.SourceCurrency</dd>
+
+                <dt class="col-sm-5">Хүлээн авагч</dt>
+                <dd class="col-sm-7">@receipt.ReceiverOwnerName</dd>
+
+                <dt class="col-sm-5">Хүлээн авсан данс</dt>
+                <dd class="col-sm-7">@receipt.ReceiverAccountNumber</dd>
+
+                <dt class="col-sm-5">Гүйлгээний утга</dt>
+                <dd class="col-sm-7">@(string.IsNullOrWhiteSpace(receipt.Description) ? "-" : receipt.Description)</dd>
+            </dl>
+
+            <button class="btn btn-primary w-100" type="button" @onclick="CloseReceipt">Хаах</button>
+        </div>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success" role="alert">@Success</div>
+}
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (!string.IsNullOrWhiteSpace(loadErrorMessage))
+{
+    <div class="alert alert-warning" role="alert">@loadErrorMessage</div>
+}
+else if (activeAccounts.Count == 0)
+{
+    <div class="alert alert-warning" role="alert">Гүйлгээ хийх идэвхтэй данс байхгүй байна.</div>
+    <a class="btn btn-primary" href="/accounts/open">Данс нээх</a>
+}
+else
+{
+    <form method="post" action="/transactions/create/submit" class="border rounded p-4" style="max-width: 560px;">
+        <div class="mb-3">
+            <label class="form-label" for="fromAccountId">Илгээх данс</label>
+            <select class="form-select" id="fromAccountId" name="FromAccountId" value="@SelectedFromAccountValue" @onchange="OnFromAccountChanged" required>
+                @foreach (var account in activeAccounts)
+                {
+                    <option value="@account.Id">@FormatAccountOption(account)</option>
+                }
+            </select>
+            @if (SelectedFromAccount is not null)
+            {
+                <div class="small text-muted mt-1">Үлдэгдэл: @SelectedFromAccount.Balance.ToString("N2") @SelectedFromAccount.Currency</div>
+            }
+        </div>
+
+        <div class="mb-3">
+            @if (IsOwnTransfer)
+            {
+                <label class="form-label" for="toOwnAccountNumber">Хүлээн авах данс</label>
+                <select class="form-select" id="toOwnAccountNumber" name="ToAccountNumber" value="@selectedToOwnAccountNumber" @onchange="OnOwnReceiverChanged" required>
+                    @foreach (var account in ReceiverOwnAccounts)
+                    {
+                        <option value="@account.AccountNumber">@FormatAccountOption(account)</option>
+                    }
+                </select>
+                @if (SelectedOwnReceiverAccount is not null)
+                {
+                    <div class="small text-muted mt-1">Үлдэгдэл: @SelectedOwnReceiverAccount.Balance.ToString("N2") @SelectedOwnReceiverAccount.Currency</div>
+                }
+                else
+                {
+                    <div class="small text-muted mt-1">Хүлээн авах өөр данс байхгүй байна.</div>
+                }
+            }
+            else
+            {
+                <label class="form-label" for="toAccountNumber">Хүлээн авах дансны дугаар</label>
+                <input class="form-control"
+                       id="toAccountNumber"
+                       name="ToAccountNumber"
+                       value="@toAccountNumber"
+                       @oninput="OnReceiverAccountInput"
+                       inputmode="numeric"
+                       autocomplete="off"
+                       required />
+
+                @if (receiverPreview is not null)
+                {
+                    <table class="table table-sm table-bordered mt-2 mb-0">
+                        <tbody>
+                            <tr>
+                                <th style="width: 180px;">Данс эзэмшигч</th>
+                                <td>@receiverPreview.OwnerDisplayName</td>
+                            </tr>
+                            <tr>
+                                <th>Валют</th>
+                                <td>@receiverPreview.Currency</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                }
+                else if (!string.IsNullOrWhiteSpace(receiverPreviewMessage))
+                {
+                    <div class="small text-muted mt-2">@receiverPreviewMessage</div>
+                }
+            }
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="amountWhole">Шилжүүлэх мөнгөн дүн</label>
+            <div class="d-flex align-items-center gap-1">
+                <input class="form-control"
+                       style="max-width: 180px;"
+                       id="amountWhole"
+                       value="@amountWhole"
+                       @oninput="OnAmountWholeInput"
+                       inputmode="numeric"
+                       autocomplete="off"
+                       placeholder="0"
+                       required />
+                <span class="px-1">.</span>
+                <input class="form-control text-center"
+                       style="max-width: 72px;"
+                       value="@amountCents"
+                       @oninput="OnAmountCentsInput"
+                       inputmode="numeric"
+                       autocomplete="off"
+                       maxlength="2"
+                       required />
+                <span class="badge text-bg-light border ms-2">@SelectedFromAccountCurrency</span>
+            </div>
+            <input type="hidden" name="Amount" value="@ComposedAmount" />
+            <input type="hidden" name="TransferType" value="@TransferType" />
+        </div>
+
+        @if (exchangeRateQuote is not null)
+        {
+            <div class="alert alert-info py-2" role="status">
+                <div class="fw-semibold">Хөрвүүлэх ханш</div>
+                <div>@exchangeRateQuote.DisplayText</div>
+                <div class="small text-muted">Эх сурвалж: Монголбанк, @exchangeRateQuote.RateDate.ToString("yyyy-MM-dd")</div>
+
+                @if (EnteredAmount > 0)
+                {
+                    <div class="row g-2 mt-2">
+                        <div class="col-6">
+                            <div class="border rounded bg-white p-2 h-100">
+                                <div class="small text-muted">Гүйлгээний дүн</div>
+                                <div class="fw-semibold">@EnteredAmount.ToString("N2") @exchangeRateQuote.FromCurrency</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="border rounded bg-white p-2 h-100">
+                                <div class="small text-muted">Хүлээн авах дүн</div>
+                                <div class="fw-semibold">@ConvertedReceiveAmount.ToString("N2") @exchangeRateQuote.ToCurrency</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (IsConvertedReceiveAmountTooSmall)
+                    {
+                        <div class="small text-danger mt-2">Хүлээн авах дүн 1-ээс их байх ёстой.</div>
+                    }
+                }
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(exchangeRateMessage))
+        {
+            <div class="alert alert-warning py-2" role="alert">@exchangeRateMessage</div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label" for="description">Гүйлгээний утга</label>
+            <textarea class="form-control"
+                      id="description"
+                      name="Description"
+                      maxlength="500"
+                      rows="3"
+                      @bind="transactionDescription"
+                      @bind:event="oninput"
+                      required></textarea>
+            @if (ShowDescriptionWarning)
+            {
+                <div class="small text-danger mt-1">Гүйлгээний утга оруулна уу.</div>
+            }
+
+            <div class="d-flex flex-wrap gap-1 mt-2">
+                @foreach (var option in descriptionOptions)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => AddDescriptionOption(option)">
+                        @option
+                    </button>
+                }
+            </div>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Гүйлгээ хийх</button>
+        <a class="btn btn-link" href="/transactions">Гүйлгээний түүх</a>
+    </form>
+}
+
+@code {
+    private static readonly string[] descriptionOptions = ["Бат-с", "Худалдан авалт", "Хэрэглээний төлбөр", "Хоол, хүнс"];
+
+    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> activeAccounts = [];
+    private BankWebApp.Web.DTOs.Transactions.ReceiverAccountPreviewDto? receiverPreview;
+    private BankWebApp.Web.DTOs.Transactions.TransactionReceiptDto? receipt;
+    private bool isLoading = true;
+    private bool showReceipt;
+    private long? currentUserId;
+    private string? loadErrorMessage;
+    private string? receiverPreviewMessage;
+    private string toAccountNumber = string.Empty;
+    private string amountWhole = string.Empty;
+    private string amountCents = "00";
+    private long? selectedFromAccountId;
+    private string? selectedToOwnAccountNumber;
+    private string? selectedFromAccountCurrency;
+    private string transactionDescription = string.Empty;
+
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Success { get; set; }
+
+    [SupplyParameterFromQuery]
+    private long? TransactionId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "type")]
+    private string? TransferType { get; set; }
+
+    private bool IsOwnTransfer => string.Equals(TransferType, "own", StringComparison.OrdinalIgnoreCase);
+    private string ComposedAmount => $"{NormalizeWholeAmount(amountWhole)}.{NormalizeCentAmount(amountCents)}";
+    private decimal EnteredAmount => decimal.TryParse(ComposedAmount, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount)
+        ? amount
+        : 0m;
+    private decimal ConvertedReceiveAmount => exchangeRateQuote is null
+        ? EnteredAmount
+        : TruncateMoney(EnteredAmount * exchangeRateQuote.Rate);
+    private bool IsConvertedReceiveAmountTooSmall => exchangeRateQuote is not null && EnteredAmount > 0 && ConvertedReceiveAmount < 1m;
+    private bool ShowDescriptionWarning => string.IsNullOrWhiteSpace(transactionDescription);
+    private string SelectedFromAccountCurrency => string.IsNullOrWhiteSpace(selectedFromAccountCurrency) ? "Валют" : selectedFromAccountCurrency;
+    private string SelectedFromAccountValue => selectedFromAccountId?.ToString() ?? string.Empty;
+    private BankWebApp.Web.DTOs.Accounts.AccountDto? SelectedFromAccount => selectedFromAccountId is null
+        ? null
+        : activeAccounts.FirstOrDefault(account => account.Id == selectedFromAccountId.Value);
+    private BankWebApp.Web.DTOs.ExchangeRates.ExchangeRateQuoteDto? exchangeRateQuote;
+    private string? exchangeRateMessage;
+    private IEnumerable<BankWebApp.Web.DTOs.Accounts.AccountDto> ReceiverOwnAccounts => activeAccounts
+        .Where(account => selectedFromAccountId is null || account.Id != selectedFromAccountId.Value);
+    private BankWebApp.Web.DTOs.Accounts.AccountDto? SelectedOwnReceiverAccount => string.IsNullOrWhiteSpace(selectedToOwnAccountNumber)
+        ? null
+        : activeAccounts.FirstOrDefault(account => account.AccountNumber == selectedToOwnAccountNumber);
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentUserId = await ResolveCurrentUserIdAsync();
+        if (currentUserId is null)
+        {
+            loadErrorMessage = "Та нэвтрээгүй байна.";
+            isLoading = false;
+            return;
+        }
+
+        var accounts = await AccountService.GetMyAccountsAsync(currentUserId.Value);
+        activeAccounts = accounts
+            .Where(account => account.IsActive)
+            .OrderBy(account => account.AccountNumber)
+            .ToList();
+        ApplyDefaultAccounts();
+        await RefreshExchangeRateQuoteAsync();
+
+        if (TransactionId is not null)
+        {
+            receipt = await TransactionService.GetMyTransactionReceiptAsync(currentUserId.Value, TransactionId.Value);
+            showReceipt = receipt is not null;
+        }
+
+        isLoading = false;
+    }
+
+    private async Task OnReceiverAccountInput(ChangeEventArgs args)
+    {
+        toAccountNumber = args.Value?.ToString() ?? string.Empty;
+        receiverPreview = null;
+        receiverPreviewMessage = null;
+
+        var accountNumber = toAccountNumber.Trim();
+        if (accountNumber.Length < 6 || currentUserId is null)
+        {
+            await RefreshExchangeRateQuoteAsync();
+            return;
+        }
+
+        receiverPreview = await TransactionService.GetReceiverAccountPreviewAsync(currentUserId.Value, accountNumber);
+        receiverPreviewMessage = receiverPreview is null ? "Идэвхтэй данс олдсонгүй." : null;
+        await RefreshExchangeRateQuoteAsync();
+    }
+
+    private async Task OnFromAccountChanged(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString();
+        if (!long.TryParse(value, out var accountId))
+        {
+            selectedFromAccountId = null;
+            selectedFromAccountCurrency = null;
+            selectedToOwnAccountNumber = ReceiverOwnAccounts.FirstOrDefault()?.AccountNumber;
+            await RefreshExchangeRateQuoteAsync();
+            return;
+        }
+
+        selectedFromAccountId = accountId;
+        selectedFromAccountCurrency = SelectedFromAccount?.Currency;
+
+        if (IsOwnTransfer && SelectedOwnReceiverAccount?.Id == selectedFromAccountId)
+        {
+            selectedToOwnAccountNumber = ReceiverOwnAccounts.FirstOrDefault()?.AccountNumber;
+        }
+
+        await RefreshExchangeRateQuoteAsync();
+    }
+
+    private async Task OnOwnReceiverChanged(ChangeEventArgs args)
+    {
+        selectedToOwnAccountNumber = args.Value?.ToString();
+        if (SelectedOwnReceiverAccount?.Id == selectedFromAccountId)
+        {
+            selectedToOwnAccountNumber = ReceiverOwnAccounts.FirstOrDefault()?.AccountNumber;
+        }
+
+        await RefreshExchangeRateQuoteAsync();
+    }
+
+    private void OnAmountWholeInput(ChangeEventArgs args)
+    {
+        amountWhole = KeepDigits(args.Value?.ToString() ?? string.Empty);
+    }
+
+    private void OnAmountCentsInput(ChangeEventArgs args)
+    {
+        amountCents = KeepDigits(args.Value?.ToString() ?? string.Empty);
+        if (amountCents.Length > 2)
+        {
+            amountCents = amountCents[..2];
+        }
+    }
+
+    private void AddDescriptionOption(string option)
+    {
+        transactionDescription = string.IsNullOrWhiteSpace(transactionDescription)
+            ? option
+            : $"{transactionDescription.Trim()} {option}";
+    }
+
+    private void DismissReceipt()
+    {
+        showReceipt = false;
+    }
+
+    private void CloseReceipt()
+    {
+        Navigation.NavigateTo("/dashboard");
+    }
+
+    private static string KeepDigits(string value)
+    {
+        return new string(value.Where(char.IsDigit).ToArray());
+    }
+
+    private static string NormalizeWholeAmount(string value)
+    {
+        var digits = KeepDigits(value);
+        return string.IsNullOrWhiteSpace(digits) ? "0" : digits;
+    }
+
+    private static string NormalizeCentAmount(string value)
+    {
+        var digits = KeepDigits(value);
+        return string.IsNullOrWhiteSpace(digits) ? "00" : digits.PadRight(2, '0')[..2];
+    }
+
+    private static decimal TruncateMoney(decimal value)
+    {
+        return decimal.Truncate(value * 100m) / 100m;
+    }
+
+    private void ApplyDefaultAccounts()
+    {
+        var defaultSender = activeAccounts.FirstOrDefault(account => account.Currency == "MNT")
+            ?? activeAccounts.FirstOrDefault();
+
+        selectedFromAccountId = defaultSender?.Id;
+        selectedFromAccountCurrency = defaultSender?.Currency;
+        selectedToOwnAccountNumber = ReceiverOwnAccounts.FirstOrDefault()?.AccountNumber;
+    }
+
+    private async Task RefreshExchangeRateQuoteAsync()
+    {
+        exchangeRateQuote = null;
+        exchangeRateMessage = null;
+
+        var fromCurrency = SelectedFromAccount?.Currency;
+        var toCurrency = GetSelectedReceiverCurrency();
+        if (string.IsNullOrWhiteSpace(fromCurrency) ||
+            string.IsNullOrWhiteSpace(toCurrency) ||
+            string.Equals(fromCurrency, toCurrency, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        exchangeRateQuote = await ExchangeRateService.GetExchangeRateQuoteAsync(fromCurrency, toCurrency);
+        if (exchangeRateQuote is null)
+        {
+            exchangeRateMessage = $"{fromCurrency}-{toCurrency} валютын ханш олдсонгүй.";
+        }
+    }
+
+    private string? GetSelectedReceiverCurrency()
+    {
+        return IsOwnTransfer
+            ? SelectedOwnReceiverAccount?.Currency
+            : receiverPreview?.Currency;
+    }
+
+    private static string FormatAccountOption(BankWebApp.Web.DTOs.Accounts.AccountDto account)
+    {
+        return $"{account.AccountNumber} - Харилцах/{account.Currency}";
+    }
+
+    private async Task<long?> ResolveCurrentUserIdAsync()
+    {
+        if (CurrentUser.UserId is not null)
+        {
+            return CurrentUser.UserId;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var value = authState.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return long.TryParse(value, out var userId) ? userId : null;
+    }
+}

@@ -1,0 +1,413 @@
+@page "/admin/exchange-rates"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "ADMIN")]
+@using System.Globalization
+@inject IAdminService AdminService
+
+<PageTitle>Админ - Банкны ханш тохируулах</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1>Банкны авах, зарах ханш</h1>
+        <div class="text-muted small">Алгоритмын margin болон хугацаатай manual override төлөвлөгөө тохируулах.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success">@Success</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (settings.Count == 0)
+{
+    <div class="alert alert-warning">
+        Ханшийн тохиргоо олдсонгүй. Эхлээд login дэлгэц дээр ханш татагдсан эсэхийг шалгана уу.
+    </div>
+}
+else
+{
+    @foreach (var setting in settings)
+    {
+        var activeSchedule = setting.OverrideSchedules.FirstOrDefault(schedule => schedule.DisplayStatus == "ACTIVE");
+
+        <section class="border rounded p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h2 class="h4 mb-1">@setting.CurrencyCode / @setting.BaseCurrency</h2>
+                    <div class="text-muted small">
+                        Албан ханш: @setting.BaseRate.ToString("N4") @setting.BaseCurrency |
+                        Ханшийн огноо: @setting.RateDate.ToString("yyyy-MM-dd") |
+                        Эх сурвалж: @setting.Source
+                    </div>
+                </div>
+                <span class="badge @(setting.IsManualOverrideActive ? "text-bg-warning" : "text-bg-success")">
+                    @(setting.IsManualOverrideActive ? "Manual override active" : "Algorithm active")
+                </span>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <SummaryCard Title="Идэвхтэй авах ханш" Value="@($"{FormatCustomerRate(setting.ActiveBuyRate)} MNT")" />
+                <SummaryCard Title="Идэвхтэй зарах ханш" Value="@($"{FormatCustomerRate(setting.ActiveSellRate)} MNT")" />
+                <SummaryCard Title="Алгоритм авах" Value="@($"{FormatCustomerRate(setting.AlgoBuyRate)} MNT")" />
+                <SummaryCard Title="Алгоритм зарах" Value="@($"{FormatCustomerRate(setting.AlgoSellRate)} MNT")" />
+            </div>
+
+            @if (activeSchedule is not null)
+            {
+                <div class="alert alert-warning d-flex justify-content-between align-items-center gap-3">
+                    <div>
+                        Одоо идэвхтэй төлөвлөгөө:
+                        авах @FormatCustomerRate(activeSchedule.ManualBuyRate),
+                        зарах @FormatCustomerRate(activeSchedule.ManualSellRate).
+                        Дуусах: @activeSchedule.EndsAt.ToString("yyyy-MM-dd HH:mm")
+                    </div>
+                    <form method="post" action="/admin/exchange-rates/disable-manual">
+                        <input type="hidden" name="ScheduleId" value="@activeSchedule.Id" />
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Төлөвлөгөө цуцлах</button>
+                    </form>
+                </div>
+            }
+
+            <div class="row g-4">
+                <div class="col-12 col-lg-5">
+                    <h3 class="h5">Алгоритмын margin</h3>
+                    <form method="post" action="/admin/exchange-rates/algorithm" class="border rounded p-3">
+                        <input type="hidden" name="SettingId" value="@setting.Id" />
+                        <div class="mb-3">
+                            <label class="form-label">Авах margin (%)</label>
+                            <input class="form-control" name="BuyMarginPercent" type="number" min="0" max="20" step="0.0001" value="@setting.AlgoBuyMarginPercent.ToString("0.####", CultureInfo.InvariantCulture)" />
+                            <div class="form-text">Жишээ: 0.05 гэвэл албан ханшаас 0.05% доогуур авах ханш бодно.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Зарах margin (%)</label>
+                            <input class="form-control" name="SellMarginPercent" type="number" min="0" max="20" step="0.0001" value="@setting.AlgoSellMarginPercent.ToString("0.####", CultureInfo.InvariantCulture)" />
+                            <div class="form-text">Жишээ: 0.10 гэвэл албан ханшаас 0.10% өндөр зарах ханш бодно.</div>
+                        </div>
+                        <button class="btn btn-primary" type="submit">Алгоритм хадгалах</button>
+                    </form>
+                </div>
+
+                <div class="col-12 col-lg-7">
+                    <h3 class="h5">Manual override төлөвлөгөө</h3>
+                    <form method="post" action="/admin/exchange-rates/manual" class="border rounded p-3">
+                        <input type="hidden" name="SettingId" value="@setting.Id" />
+                        <div class="row g-3">
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Нэмэх горим</label>
+                                <select class="form-select" name="AdjustmentMode">
+                                    <option value="PERCENT">Хувиар нэмэх (%)</option>
+                                    <option value="AMOUNT">Дүнгээр нэмэх (MNT)</option>
+                                </select>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Авах нэмэгдэл</label>
+                                <input class="form-control" name="BuyAdjustment" type="number" min="0" step="0.0001" value="0" />
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label">Зарах нэмэгдэл</label>
+                                <input class="form-control" name="SellAdjustment" type="number" min="0" step="0.0001" value="0" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Ашиглагдаж эхлэх</label>
+                                <input class="form-control" name="StartAt" type="datetime-local" value="@FormatDateTimeLocal(DefaultStartAt)" />
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label">Ашиглагдаж дуусах</label>
+                                <input class="form-control" name="EndAt" type="datetime-local" value="@FormatDateTimeLocal(DefaultEndAt)" />
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Тайлбар</label>
+                                <textarea class="form-control" name="Note" rows="2" maxlength="500" placeholder="Жишээ: Зах зээлийн огцом савлагааны үеийн түр ханш"></textarea>
+                            </div>
+                            <div class="col-12 d-flex align-items-end">
+                                <button class="btn btn-warning" type="submit">Төлөвлөгөө үүсгэх</button>
+                            </div>
+                        </div>
+                        <div class="form-text mt-2">
+                            Төлөвлөгөөний хугацаа давхцаж болохгүй. Хугацаа эхлэх хүртэл algorithm ханш хэвээр, эхэлсний дараа manual ханш автоматаар ашиглагдана.
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            @if (setting.OverrideSchedules.Count > 0)
+            {
+                <div class="mt-4">
+                    <h3 class="h5">Төлөвлөгөөнүүд</h3>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Төлөв</th>
+                                    <th>Авах</th>
+                                    <th>Зарах</th>
+                                    <th>Эхлэх</th>
+                                    <th>Дуусах</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var schedule in setting.OverrideSchedules.OrderByDescending(schedule => schedule.StartsAt))
+                                {
+                                    <tr>
+                                        <td>@TranslateStatus(schedule.DisplayStatus)</td>
+                                        <td>@FormatCustomerRate(schedule.ManualBuyRate)</td>
+                                        <td>@FormatCustomerRate(schedule.ManualSellRate)</td>
+                                        <td>@schedule.StartsAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>@schedule.EndsAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => OpenSchedule(schedule)">Дэлгэрэнгүй</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+        </section>
+    }
+
+    <section class="border rounded p-3 mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Ханшийн төлөвлөгөөний календар</h2>
+            <div class="btn-group">
+                <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="PreviousMonth">Өмнөх</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" @onclick="NextMonth">Дараах</button>
+            </div>
+        </div>
+        <div class="text-muted mb-2">@calendarMonth.ToString("yyyy MMMM", CultureInfo.CurrentCulture)</div>
+        <div class="rate-calendar">
+            @foreach (var dayName in DayNames)
+            {
+                <div class="rate-calendar-head">@dayName</div>
+            }
+            @foreach (var day in CalendarDays)
+            {
+                var daySchedules = GetSchedulesForDay(day).ToList();
+                <div class="rate-calendar-day @(day.Month == calendarMonth.Month ? "" : "text-muted bg-light")">
+                    <div class="fw-semibold small">@day.Day</div>
+                    @foreach (var schedule in daySchedules)
+                    {
+                        <button class="rate-calendar-badge @GetScheduleColorClass(schedule)" type="button" @onclick="() => OpenSchedule(schedule)">
+                            @schedule.CurrencyCode @FormatCustomerRate(schedule.ManualBuyRate) / @FormatCustomerRate(schedule.ManualSellRate)
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+}
+
+@if (selectedSchedule is not null)
+{
+    <div class="rate-modal-backdrop" @onclick="CloseSchedule">
+        <div class="rate-modal bg-white border rounded shadow p-4" @onclick:stopPropagation>
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <div>
+                    <h2 class="h4 mb-1">@selectedSchedule.CurrencyCode / @selectedSchedule.BaseCurrency</h2>
+                    <div class="text-muted small">@TranslateStatus(selectedSchedule.DisplayStatus)</div>
+                </div>
+                <button class="btn-close" type="button" aria-label="Хаах" @onclick="CloseSchedule"></button>
+            </div>
+            <dl class="row mb-0">
+                <dt class="col-sm-5">Авах ханш</dt>
+                <dd class="col-sm-7">@FormatCustomerRate(selectedSchedule.ManualBuyRate) MNT</dd>
+                <dt class="col-sm-5">Зарах ханш</dt>
+                <dd class="col-sm-7">@FormatCustomerRate(selectedSchedule.ManualSellRate) MNT</dd>
+                <dt class="col-sm-5">Эхлэх</dt>
+                <dd class="col-sm-7">@selectedSchedule.StartsAt.ToString("yyyy-MM-dd HH:mm")</dd>
+                <dt class="col-sm-5">Дуусах</dt>
+                <dd class="col-sm-7">@selectedSchedule.EndsAt.ToString("yyyy-MM-dd HH:mm")</dd>
+                <dt class="col-sm-5">Үүсгэсэн</dt>
+                <dd class="col-sm-7">@DisplayUser(selectedSchedule.CreatedByUsername) / @selectedSchedule.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+                @if (!string.IsNullOrWhiteSpace(selectedSchedule.Note))
+                {
+                    <dt class="col-sm-5">Тайлбар</dt>
+                    <dd class="col-sm-7">@selectedSchedule.Note</dd>
+                }
+            </dl>
+            @if (selectedSchedule.DisplayStatus is "SCHEDULED" or "ACTIVE")
+            {
+                <form method="post" action="/admin/exchange-rates/disable-manual" class="mt-3">
+                    <input type="hidden" name="ScheduleId" value="@selectedSchedule.Id" />
+                    <button class="btn btn-outline-danger" type="submit">Төлөвлөгөө цуцлах</button>
+                </form>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .rate-calendar {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: .5rem;
+    }
+
+    .rate-calendar-head {
+        font-size: .8rem;
+        font-weight: 700;
+        color: #6c757d;
+    }
+
+    .rate-calendar-day {
+        min-height: 96px;
+        border: 1px solid #dee2e6;
+        border-radius: .5rem;
+        padding: .5rem;
+        overflow: hidden;
+    }
+
+    .rate-calendar-badge {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-radius: .35rem;
+        color: #fff;
+        font-size: .72rem;
+        line-height: 1.2;
+        margin-top: .35rem;
+        padding: .3rem .35rem;
+        text-align: left;
+    }
+
+    .rate-color-0 { background: #0d6efd; }
+    .rate-color-1 { background: #198754; }
+    .rate-color-2 { background: #6f42c1; }
+    .rate-color-3 { background: #fd7e14; }
+
+    .rate-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        background: rgba(20, 24, 31, .42);
+        backdrop-filter: blur(5px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .rate-modal {
+        width: min(560px, 94vw);
+        max-height: 90vh;
+        overflow: auto;
+    }
+</style>
+
+@code {
+    private static readonly string[] DayNames = ["Ня", "Да", "Мя", "Лх", "Пү", "Ба", "Бя"];
+    private List<AdminCurrencyRateSettingDto> settings = [];
+    private bool isLoading = true;
+    private DateTime calendarMonth = new(MongoliaClock.Today.Year, MongoliaClock.Today.Month, 1);
+    private AdminCurrencyRateOverrideScheduleDto? selectedSchedule;
+
+    [SupplyParameterFromQuery]
+    private string? Success { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    private DateTime DefaultStartAt => TrimToMinute(MongoliaClock.Now);
+
+    private DateTime DefaultEndAt => DefaultStartAt.AddHours(2);
+
+    private IEnumerable<DateTime> CalendarDays
+    {
+        get
+        {
+            var firstDay = new DateTime(calendarMonth.Year, calendarMonth.Month, 1);
+            var start = firstDay.AddDays(-(int)firstDay.DayOfWeek);
+            return Enumerable.Range(0, 42).Select(offset => start.AddDays(offset));
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        settings = await AdminService.GetCurrencyRateSettingsAsync();
+        isLoading = false;
+    }
+
+    private IEnumerable<AdminCurrencyRateOverrideScheduleDto> GetSchedulesForDay(DateTime day)
+    {
+        var dayStart = day.Date;
+        var dayEnd = dayStart.AddDays(1);
+        return settings
+            .SelectMany(setting => setting.OverrideSchedules)
+            .Where(schedule =>
+                schedule.DisplayStatus != "CANCELLED" &&
+                schedule.StartsAt < dayEnd &&
+                schedule.EndsAt > dayStart)
+            .OrderBy(schedule => schedule.StartsAt);
+    }
+
+    private void OpenSchedule(AdminCurrencyRateOverrideScheduleDto schedule)
+    {
+        selectedSchedule = schedule;
+    }
+
+    private void CloseSchedule()
+    {
+        selectedSchedule = null;
+    }
+
+    private void PreviousMonth()
+    {
+        calendarMonth = calendarMonth.AddMonths(-1);
+    }
+
+    private void NextMonth()
+    {
+        calendarMonth = calendarMonth.AddMonths(1);
+    }
+
+    private static DateTime TrimToMinute(DateTime value)
+    {
+        return new DateTime(value.Year, value.Month, value.Day, value.Hour, value.Minute, 0);
+    }
+
+    private static string FormatDateTimeLocal(DateTime value)
+    {
+        return value.ToString("yyyy-MM-ddTHH:mm", CultureInfo.InvariantCulture);
+    }
+
+    private static string TranslateStatus(string status)
+    {
+        return status switch
+        {
+            "ACTIVE" => "Идэвхтэй",
+            "SCHEDULED" => "Төлөвлөгдсөн",
+            "EXPIRED" => "Дууссан",
+            "CANCELLED" => "Цуцлагдсан",
+            _ => status
+        };
+    }
+
+    private static string DisplayUser(string? username)
+    {
+        return string.IsNullOrWhiteSpace(username) ? "system" : username;
+    }
+
+    private static string GetScheduleColorClass(AdminCurrencyRateOverrideScheduleDto schedule)
+    {
+        var key = $"{schedule.CurrencyCode}:{schedule.ManualBuyRate:0}:{schedule.ManualSellRate:0}";
+        var index = (int)((uint)key.GetHashCode() % 4);
+        return $"rate-color-{index}";
+    }
+
+    private static string FormatCustomerRate(decimal rate)
+    {
+        return rate.ToString("N0", CultureInfo.CurrentCulture);
+    }
+}

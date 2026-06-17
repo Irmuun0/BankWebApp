@@ -1,0 +1,25 @@
+@page "/db-test"
+@rendermode InteractiveServer
+@inject BankWebApp.Web.Services.Interfaces.IDatabaseTestService DatabaseTestService
+
+<h3>Database Test</h3>
+
+@if (isLoading)
+{
+    <p>Уншиж байна...</p>
+}
+else
+{
+    <p>Users count: @userCount</p>
+}
+
+@code {
+    private bool isLoading = true;
+    private int userCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        userCount = await DatabaseTestService.GetUserCountAsync();
+        isLoading = false;
+    }
+}

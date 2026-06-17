@@ -1,0 +1,329 @@
+.floating-rate-widget {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 1900;
+    pointer-events: none;
+}
+
+.floating-rate-action {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border: 0;
+    border-radius: 50%;
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.28);
+    pointer-events: auto;
+    transition: transform 180ms ease, opacity 180ms ease, box-shadow 180ms ease;
+}
+
+.floating-rate-action:hover,
+.floating-rate-action:focus {
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.34);
+    transform: translateY(-1px);
+}
+
+.floating-rate-main {
+    background: #1f2937;
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.floating-rate-money {
+    background: #198754;
+    font-size: 1.2rem;
+    opacity: 0;
+    transform: translateY(0) scale(0.82);
+    visibility: hidden;
+}
+
+.floating-rate-money.show {
+    opacity: 1;
+    transform: translateY(-3.8rem) scale(1);
+    visibility: visible;
+}
+
+.floating-rate-panel {
+    position: absolute;
+    right: 0;
+    bottom: 7.2rem;
+    width: min(820px, calc(100vw - 2.5rem));
+    max-height: min(540px, calc(100vh - 9rem));
+    overflow: hidden;
+    border: 1px solid #d8e0ec;
+    border-radius: 0.85rem;
+    background: #fff;
+    box-shadow: 0 22px 58px rgba(15, 23, 42, 0.28);
+    pointer-events: auto;
+    animation: floating-rate-panel-in 160ms ease-out;
+}
+
+.floating-rate-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid #e5ebf3;
+}
+
+.floating-rate-title {
+    font-weight: 700;
+    color: #243044;
+}
+
+.floating-rate-subtitle {
+    margin-top: 0.15rem;
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.floating-rate-close {
+    border: 0;
+    background: transparent;
+    color: #64748b;
+    font-size: 1.45rem;
+    line-height: 1;
+}
+
+.floating-rate-empty {
+    padding: 1rem;
+    color: #64748b;
+}
+
+.floating-rate-table-wrap {
+    max-height: 430px;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.floating-rate-table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+    border-collapse: collapse;
+    color: #263247;
+    font-size: clamp(0.78rem, 1.7vw, 0.92rem);
+}
+
+.floating-rate-col-name {
+    width: 40%;
+}
+
+.floating-rate-col-code {
+    width: 12%;
+}
+
+.floating-rate-col-official {
+    width: 20%;
+}
+
+.floating-rate-col-buy,
+.floating-rate-col-sell {
+    width: 14%;
+}
+
+.floating-rate-table th,
+.floating-rate-table td {
+    border: 1px solid #d8e0ec;
+    padding: 0.7rem 0.85rem;
+    vertical-align: middle;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.floating-rate-table th {
+    background: #f8fafc;
+    color: #64748b;
+    font-weight: 700;
+    text-align: center;
+}
+
+.floating-rate-currency {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    font-weight: 700;
+    min-width: 0;
+}
+
+.floating-rate-flag {
+    flex: 0 0 1.4rem;
+    width: 1.4rem;
+    height: 1.4rem;
+    border: 1px solid rgba(100, 116, 139, 0.35);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+    text-align: center;
+    font-size: 1.15rem;
+    overflow: hidden;
+}
+
+.flag-usd {
+    background:
+        linear-gradient(90deg, #21468b 0 42%, transparent 42%),
+        repeating-linear-gradient(180deg, #b22234 0 12%, #fff 12% 24%);
+}
+
+.flag-eur {
+    background:
+        radial-gradient(circle at 50% 24%, #ffd700 0 8%, transparent 9%),
+        radial-gradient(circle at 72% 36%, #ffd700 0 8%, transparent 9%),
+        radial-gradient(circle at 72% 64%, #ffd700 0 8%, transparent 9%),
+        radial-gradient(circle at 50% 76%, #ffd700 0 8%, transparent 9%),
+        radial-gradient(circle at 28% 64%, #ffd700 0 8%, transparent 9%),
+        radial-gradient(circle at 28% 36%, #ffd700 0 8%, transparent 9%),
+        #244aa5;
+}
+
+.flag-jpy {
+    background: radial-gradient(circle, #bc002d 0 34%, transparent 35%), #fff;
+}
+
+.flag-chf {
+    background:
+        linear-gradient(#fff 0 0) center / 58% 20% no-repeat,
+        linear-gradient(#fff 0 0) center / 20% 58% no-repeat,
+        #d52b1e;
+}
+
+.flag-gbp {
+    background:
+        linear-gradient(45deg, transparent 0 38%, #fff 38% 45%, #c8102e 45% 55%, #fff 55% 62%, transparent 62%),
+        linear-gradient(-45deg, transparent 0 38%, #fff 38% 45%, #c8102e 45% 55%, #fff 55% 62%, transparent 62%),
+        linear-gradient(90deg, transparent 0 40%, #fff 40% 45%, #c8102e 45% 55%, #fff 55% 60%, transparent 60%),
+        linear-gradient(180deg, transparent 0 40%, #fff 40% 45%, #c8102e 45% 55%, #fff 55% 60%, transparent 60%),
+        #012169;
+}
+
+.flag-hkd {
+    background: radial-gradient(circle at 50% 50%, #fff 0 13%, transparent 14%), #de2910;
+}
+
+.flag-cny {
+    background: radial-gradient(circle at 34% 32%, #ffde00 0 13%, transparent 14%), #de2910;
+}
+
+.flag-krw {
+    background:
+        radial-gradient(circle at 42% 50%, #cd2e3a 0 21%, transparent 22%),
+        radial-gradient(circle at 58% 50%, #0047a0 0 21%, transparent 22%),
+        #fff;
+}
+
+.flag-cad {
+    background: linear-gradient(90deg, #d52b1e 0 28%, #fff 28% 72%, #d52b1e 72%);
+}
+
+.flag-aud,
+.flag-nzd {
+    background: radial-gradient(circle at 68% 42%, #fff 0 7%, transparent 8%), #012169;
+}
+
+.flag-sgd {
+    background: linear-gradient(180deg, #ef3340 0 50%, #fff 50%);
+}
+
+.flag-xau {
+    background: radial-gradient(circle at 35% 30%, #fff7b0 0 12%, transparent 13%), linear-gradient(135deg, #f6d365, #b8860b);
+}
+
+.flag-xag {
+    background: radial-gradient(circle at 35% 30%, #fff 0 12%, transparent 13%), linear-gradient(135deg, #f8fafc, #94a3b8);
+}
+
+.floating-rate-code {
+    color: #64748b;
+    font-weight: 700;
+    text-align: center;
+}
+
+.floating-rate-number {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: normal;
+}
+
+@keyframes floating-rate-panel-in {
+    from {
+        opacity: 0;
+        transform: translateY(0.55rem) scale(0.98);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@media (max-width: 640px) {
+    .floating-rate-widget {
+        right: 0.85rem;
+        bottom: 0.85rem;
+    }
+
+    .floating-rate-action {
+        width: 2.8rem;
+        height: 2.8rem;
+    }
+
+    .floating-rate-money.show {
+        transform: translateY(-3.45rem) scale(1);
+    }
+
+    .floating-rate-panel {
+        right: -0.25rem;
+        bottom: 6.45rem;
+        width: calc(100vw - 1.2rem);
+        max-height: min(520px, calc(100vh - 8rem));
+    }
+
+    .floating-rate-panel-header {
+        padding: 0.75rem;
+    }
+
+    .floating-rate-table {
+        min-width: 0;
+        font-size: clamp(0.68rem, 2.9vw, 0.82rem);
+    }
+
+    .floating-rate-col-name {
+        width: 36%;
+    }
+
+    .floating-rate-col-code {
+        width: 11%;
+    }
+
+    .floating-rate-col-official {
+        width: 21%;
+    }
+
+    .floating-rate-col-buy,
+    .floating-rate-col-sell {
+        width: 16%;
+    }
+
+    .floating-rate-table th,
+    .floating-rate-table td {
+        padding: 0.48rem 0.35rem;
+    }
+
+    .floating-rate-currency {
+        gap: 0.3rem;
+    }
+
+    .floating-rate-flag {
+        flex-basis: 1.05rem;
+        width: 1.05rem;
+        height: 1.05rem;
+        font-size: 0.95rem;
+    }
+}

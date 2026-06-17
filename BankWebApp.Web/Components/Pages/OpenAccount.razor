@@ -1,0 +1,53 @@
+@page "/accounts/open"
+@attribute [Authorize(Roles = "USER,ADMIN")]
+
+<PageTitle>Данс нээх</PageTitle>
+
+<div class="mb-3">
+    <a class="btn btn-outline-secondary" href="/dashboard">Буцах</a>
+</div>
+
+<h1>Данс нээх</h1>
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger" role="alert">@Error</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success" role="alert">
+        @Success
+        @if (AccountId is not null)
+        {
+            <div class="mt-2">
+                <a href="/accounts/@AccountId">Шинэ дансыг харах</a>
+            </div>
+        }
+    </div>
+}
+
+<form method="post" action="/accounts/open/submit" class="border rounded p-4" style="max-width: 420px;">
+    <div class="mb-3">
+        <label class="form-label" for="currency">Валют</label>
+        <select class="form-select" id="currency" name="Currency">
+            <option value="">Сонгоно уу</option>
+            <option value="MNT">MNT</option>
+            <option value="USD">USD</option>
+        </select>
+    </div>
+
+    <button class="btn btn-primary" type="submit">Данс нээх</button>
+    <a class="btn btn-link" href="/accounts">Миний дансууд</a>
+</form>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Success { get; set; }
+
+    [SupplyParameterFromQuery]
+    private long? AccountId { get; set; }
+}

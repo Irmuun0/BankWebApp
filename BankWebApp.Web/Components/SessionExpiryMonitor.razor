@@ -1,0 +1,137 @@
+@implements IDisposable
+@rendermode InteractiveServer
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+@if (_shouldRender)
+{
+    <div class="session-countdown" aria-label="Нэвтрэх хугацааны үлдэгдэл">
+        <span class="session-clock">@FormatRemainingTime()</span>
+        <span class="session-tooltip">Нэвтэрснээс хойш 30 минутын дараа автоматаар системээс гарна.</span>
+    </div>
+}
+
+<style>
+    .session-countdown {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 58px;
+        height: 32px;
+        padding: 0 10px;
+        border: 1px solid #d7dde5;
+        border-radius: 999px;
+        background: #fff;
+        color: #1f2937;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: default;
+    }
+
+    .session-tooltip {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 8px);
+        z-index: 1100;
+        display: none;
+        width: 270px;
+        padding: 8px 10px;
+        border: 1px solid #d7dde5;
+        border-radius: 8px;
+        background: #111827;
+        color: #fff;
+        font-size: 0.82rem;
+        font-weight: 400;
+        line-height: 1.35;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+        text-align: left;
+    }
+
+    .session-tooltip::before {
+        content: "";
+        position: absolute;
+        top: -6px;
+        right: 20px;
+        border-left: 6px solid transparent;
+        border-right: 6px solid transparent;
+        border-bottom: 6px solid #111827;
+    }
+
+    .session-countdown:hover .session-tooltip,
+    .session-countdown:focus-within .session-tooltip {
+        display: block;
+    }
+</style>
+
+@code {
+    private CancellationTokenSource? _timerCancellation;
+    private DateTime _expiresUtc;
+    private TimeSpan _remainingTime;
+    private bool _shouldRender;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true || user.IsInRole("ADMIN"))
+        {
+            return;
+        }
+
+        var expiryValue = user.FindFirst(BankWebApp.Web.Constants.AuthConstants.SessionExpiresUtcTicksClaim)?.Value;
+        if (!long.TryParse(expiryValue, out var expiryTicks))
+        {
+            return;
+        }
+
+        _expiresUtc = new DateTime(expiryTicks, DateTimeKind.Utc);
+        _remainingTime = CalculateRemainingTime();
+        _shouldRender = true;
+
+        _timerCancellation = new CancellationTokenSource();
+        _ = RunCountdownAsync(_timerCancellation.Token);
+    }
+
+    private async Task RunCountdownAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                _remainingTime = CalculateRemainingTime();
+                await InvokeAsync(StateHasChanged);
+
+                if (_remainingTime <= TimeSpan.Zero)
+                {
+                    Navigation.NavigateTo("/auth/session-expired", forceLoad: true);
+                    return;
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    private TimeSpan CalculateRemainingTime()
+    {
+        var remaining = _expiresUtc - DateTime.UtcNow;
+        return remaining < TimeSpan.Zero ? TimeSpan.Zero : remaining;
+    }
+
+    private string FormatRemainingTime()
+    {
+        var totalMinutes = (int)_remainingTime.TotalMinutes;
+        return $"{totalMinutes:00}:{_remainingTime.Seconds:00}";
+    }
+
+    public void Dispose()
+    {
+        _timerCancellation?.Cancel();
+        _timerCancellation?.Dispose();
+    }
+}

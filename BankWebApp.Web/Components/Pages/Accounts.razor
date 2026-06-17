@@ -1,0 +1,84 @@
+@page "/accounts"
+@attribute [Authorize(Roles = "USER,ADMIN")]
+@inject ICurrentUserService CurrentUser
+@inject IAccountService AccountService
+
+<PageTitle>Миний дансууд</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a class="btn btn-outline-secondary" href="/dashboard">Буцах</a>
+    <div>
+        <a class="btn btn-outline-primary me-2" href="/accounts/settings">Тохиргоо</a>
+        <a class="btn btn-primary" href="/accounts/open">Данс нээх</a>
+    </div>
+</div>
+
+<h1>Миний дансууд</h1>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-warning" role="alert">@errorMessage</div>
+}
+else if (accounts.Count == 0)
+{
+    <p>Танд одоогоор данс байхгүй байна.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Дансны дугаар</th>
+                <th>Төрөл</th>
+                <th>Валют</th>
+                <th>Үлдэгдэл</th>
+                <th>Төлөв</th>
+                <th>Нээсэн огноо</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var account in accounts)
+            {
+                <tr>
+                    <td>@account.AccountNumber</td>
+                    <td>@DisplayAccountType(account.AccountType)</td>
+                    <td>@account.Currency</td>
+                    <td>@account.Balance.ToString("N2")</td>
+                    <td>@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</td>
+                    <td>@account.CreatedAt.ToString("yyyy-MM-dd")</td>
+                    <td><a class="btn btn-sm btn-outline-primary" href="/accounts/@account.Id">Дэлгэрэнгүй</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> accounts = [];
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = CurrentUser.UserId;
+        if (userId is null)
+        {
+            errorMessage = "Та нэвтрээгүй байна.";
+            isLoading = false;
+            return;
+        }
+
+        accounts = await AccountService.GetMyAccountsAsync(userId.Value);
+        isLoading = false;
+    }
+
+    private static string DisplayAccountType(string accountType)
+    {
+        return accountType == "CHECKING" ? "Харилцах" : accountType;
+    }
+}

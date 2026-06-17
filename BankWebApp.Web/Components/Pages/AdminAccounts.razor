@@ -1,0 +1,128 @@
+@page "/admin/accounts"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Админ - Данснууд</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Данснууд</h1>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success" role="alert">@Success</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger" role="alert">@Error</div>
+}
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else
+{
+    <form class="row g-2 mb-3" method="get" action="/admin/accounts">
+        <div class="col-12 col-md-5">
+            <input class="form-control" name="search" value="@Search" placeholder="Данс, эзэмшигч, валют хайх" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary" type="submit">Хайх</button>
+        </div>
+        <div class="col-auto">
+            <a class="btn btn-outline-secondary" href="/admin/accounts">Цэвэрлэх</a>
+        </div>
+    </form>
+}
+
+@if (!isLoading && accounts.Items.Count == 0)
+{
+    <p>Данс олдсонгүй.</p>
+}
+else if (!isLoading)
+{
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Эзэмшигч</th>
+                <th>Дансны дугаар</th>
+                <th>Төрөл</th>
+                <th>Валют</th>
+                <th>Үлдэгдэл</th>
+                <th>Төлөв</th>
+                <th>Нээсэн огноо</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var account in accounts.Items)
+            {
+                <tr>
+                    <td>
+                        <div>@account.Username</div>
+                        <div class="small text-muted">@(account.FullName ?? "-")</div>
+                    </td>
+                    <td>@account.AccountNumber</td>
+                    <td>@DisplayAccountType(account.AccountType)</td>
+                    <td>@account.Currency</td>
+                    <td>@account.Balance.ToString("N2")</td>
+                    <td>@DisplayActive(account.IsActive)</td>
+                    <td>@account.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="text-end">
+                        <form method="post" action="/admin/accounts/toggle-status">
+                            <input type="hidden" name="AccountId" value="@account.Id" />
+                            <input type="hidden" name="IsActive" value="@(!account.IsActive)" />
+                            <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
+                            <button class="btn p-0 border-0 bg-transparent" type="submit" title="Төлөв солих">
+                                <span class="d-inline-flex align-items-center rounded-pill p-1 @(account.IsActive ? "bg-success" : "bg-secondary")" style="width: 44px;">
+                                    <span class="bg-white rounded-circle d-inline-block @(account.IsActive ? "ms-auto" : "")" style="width: 18px; height: 18px;"></span>
+                                </span>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <AdminPager BasePath="/admin/accounts" Page="@accounts.Page" TotalPages="@accounts.TotalPages" Search="@Search" />
+}
+
+@code {
+    private AdminPagedResultDto<AdminAccountDto> accounts = new();
+    private bool isLoading = true;
+
+    [SupplyParameterFromQuery]
+    private string? Search { get; set; }
+
+    [SupplyParameterFromQuery]
+    private int Page { get; set; } = 1;
+
+    [SupplyParameterFromQuery]
+    private string? Success { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        accounts = await AdminService.GetAccountsAsync(Search, Page);
+        isLoading = false;
+    }
+
+    private string CurrentPageUrl => "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+
+    private static string DisplayAccountType(string accountType)
+    {
+        return accountType == "CHECKING" ? "Харилцах" : accountType;
+    }
+
+    private static string DisplayActive(bool isActive)
+    {
+        return isActive ? "Идэвхтэй" : "Идэвхгүй";
+    }
+}

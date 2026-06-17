@@ -1,0 +1,42 @@
+@if (TotalPages > 1)
+{
+    <nav class="d-flex align-items-center gap-2 mt-3" aria-label="Admin pagination">
+        <a class="btn btn-sm btn-outline-secondary @(Page <= 1 ? "disabled" : "")" href="@BuildHref(Page - 1)">Өмнөх</a>
+        <span class="small text-muted">@Page / @TotalPages</span>
+        <a class="btn btn-sm btn-outline-secondary @(Page >= TotalPages ? "disabled" : "")" href="@BuildHref(Page + 1)">Дараах</a>
+    </nav>
+}
+
+@code {
+    [Parameter]
+    public string BasePath { get; set; } = string.Empty;
+
+    [Parameter]
+    public int Page { get; set; }
+
+    [Parameter]
+    public int TotalPages { get; set; }
+
+    [Parameter]
+    public string? Search { get; set; }
+
+    [Parameter]
+    public string? ReviewStatus { get; set; }
+
+    private string BuildHref(int page)
+    {
+        var query = new List<string> { $"page={page}" };
+
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            query.Add($"search={Uri.EscapeDataString(Search)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ReviewStatus))
+        {
+            query.Add($"reviewStatus={Uri.EscapeDataString(ReviewStatus)}");
+        }
+
+        return $"{BasePath}?{string.Join("&", query)}";
+    }
+}

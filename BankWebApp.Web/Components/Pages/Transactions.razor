@@ -1,0 +1,175 @@
+@page "/transactions"
+@attribute [Authorize(Roles = "USER,ADMIN")]
+@inject ICurrentUserService CurrentUser
+@inject ITransactionService TransactionService
+
+<PageTitle>Гүйлгээний түүх</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a class="btn btn-outline-secondary" href="/dashboard">Буцах</a>
+</div>
+
+<h1>Гүйлгээний түүх</h1>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-warning" role="alert">@errorMessage</div>
+}
+else if (transactions.Count == 0)
+{
+    <p>Танд одоогоор гүйлгээ байхгүй байна.</p>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-lg-4">
+            <DonutChart Title="Гүйлгээний чиглэл"
+                        Subtitle="Илгээсэн болон хүлээн авсан гүйлгээ"
+                        Unit="ш"
+                        Items="@TransactionDirectionChart" />
+        </div>
+        <div class="col-12 col-lg-4">
+            <DonutChart Title="Гүйлгээний төлөв"
+                        Subtitle="Амжилттай болон бусад төлөв"
+                        Unit="ш"
+                        Items="@TransactionStatusChart" />
+        </div>
+        <div class="col-12 col-lg-4">
+            <BarChart Title="Орлого, зарлагын бүтэц"
+                      Subtitle="Валют болон чиглэлээр нэгтгэсэн дүн"
+                      Items="@CashflowByCurrencyChart" />
+        </div>
+        <div class="col-12">
+            <LineChart Title="Сүүлийн 14 өдрийн идэвх"
+                       Subtitle="Өдөр бүрийн гүйлгээний тоо"
+                       Unit="ш"
+                       Items="@TransactionTrendChart" />
+        </div>
+    </div>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Огноо</th>
+                <th>Чиглэл</th>
+                <th>Илгээгч</th>
+                <th>Хүлээн авагч</th>
+                <th>Дүн</th>
+                <th>Орсон дүн</th>
+                <th>Төлөв</th>
+                <th>Тайлбар</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var transaction in transactions)
+            {
+                <tr>
+                    <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@DisplayDirection(transaction.Direction)</td>
+                    <td>@transaction.FromAccountNumber</td>
+                    <td>@transaction.ToAccountNumber</td>
+                    <td>@transaction.Amount.ToString("N2") @transaction.SourceCurrency</td>
+                    <td>@transaction.CreditedAmount.ToString("N2") @transaction.TargetCurrency</td>
+                    <td>@DisplayStatus(transaction.Status)</td>
+                    <td>@transaction.Description</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<BankWebApp.Web.DTOs.Transactions.UserTransactionDto> transactions = [];
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = CurrentUser.UserId;
+        if (userId is null)
+        {
+            errorMessage = "Та нэвтрээгүй байна.";
+            isLoading = false;
+            return;
+        }
+
+        transactions = await TransactionService.GetMyTransactionsAsync(userId.Value);
+        isLoading = false;
+    }
+
+    private static string DisplayDirection(string direction)
+    {
+        return direction == "SENT" ? "Илгээсэн" : "Хүлээн авсан";
+    }
+
+    private static string DisplayStatus(string status)
+    {
+        return status == "SUCCESS" ? "Амжилттай" : status;
+    }
+
+    private IReadOnlyList<ChartDataPoint> TransactionDirectionChart =>
+    [
+        new() { Label = "Илгээсэн", Value = transactions.Count(transaction => transaction.Direction == "SENT"), Color = "#dc2626" },
+        new() { Label = "Хүлээн авсан", Value = transactions.Count(transaction => transaction.Direction != "SENT"), Color = "#2563eb" }
+    ];
+
+    private IReadOnlyList<ChartDataPoint> TransactionStatusChart => transactions
+        .GroupBy(transaction => DisplayStatus(transaction.Status))
+        .OrderByDescending(group => group.Count())
+        .Select((group, index) => new ChartDataPoint
+        {
+            Label = group.Key,
+            Value = group.Count(),
+            Color = ChartColors[index % ChartColors.Length]
+        })
+        .ToList();
+
+    private IReadOnlyList<ChartDataPoint> CashflowByCurrencyChart => transactions
+        .Select(transaction => new
+        {
+            Label = transaction.Direction == "SENT"
+                ? $"Зарлага {transaction.SourceCurrency}"
+                : $"Орлого {transaction.TargetCurrency}",
+            Value = transaction.Direction == "SENT" ? transaction.Amount : transaction.CreditedAmount,
+            Color = transaction.Direction == "SENT" ? "#dc2626" : "#2563eb"
+        })
+        .GroupBy(item => item.Label)
+        .OrderBy(group => group.Key)
+        .Select(group => new ChartDataPoint
+        {
+            Label = group.Key,
+            Value = group.Sum(item => item.Value),
+            Color = group.First().Color
+        })
+        .ToList();
+
+    private IReadOnlyList<ChartDataPoint> TransactionTrendChart
+    {
+        get
+        {
+            var today = MongoliaClock.Today;
+            return Enumerable.Range(0, 14)
+                .Select(offset => today.AddDays(offset - 13))
+                .Select(day => new ChartDataPoint
+                {
+                    Label = day.ToString("MM-dd"),
+                    Value = transactions.Count(transaction => DateOnly.FromDateTime(transaction.CreatedAt) == day),
+                    Color = "#2563eb"
+                })
+                .ToList();
+        }
+    }
+
+    private static readonly string[] ChartColors =
+    [
+        "#16a34a",
+        "#f59e0b",
+        "#dc2626",
+        "#7c3aed",
+        "#0891b2"
+    ];
+}

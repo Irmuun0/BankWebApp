@@ -1,0 +1,85 @@
+<section class="chart-card">
+    <div class="chart-card-header">
+        <div>
+            <h3>@Title</h3>
+            @if (!string.IsNullOrWhiteSpace(Subtitle))
+            {
+                <p>@Subtitle</p>
+            }
+        </div>
+    </div>
+
+    @if (VisibleItems.Count == 0)
+    {
+        <div class="chart-empty">Харуулах өгөгдөл алга.</div>
+    }
+    else
+    {
+        <div class="donut-chart-layout">
+            <div class="donut-chart" style="@BuildDonutStyle()" role="img" aria-label="@Title">
+                <div class="donut-chart-center">
+                    <strong>@FormatValue(Total)</strong>
+                    @if (!string.IsNullOrWhiteSpace(Unit))
+                    {
+                        <span>@Unit</span>
+                    }
+                </div>
+            </div>
+
+            <div class="donut-chart-legend">
+                @foreach (var item in VisibleItems)
+                {
+                    <div class="donut-chart-legend-item">
+                        <span class="donut-chart-swatch" style="@($"background: {item.Color};")"></span>
+                        <span class="donut-chart-label">@item.Label</span>
+                        <span class="donut-chart-value">@FormatValue(item.Value)</span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Subtitle { get; set; }
+
+    [Parameter]
+    public string? Unit { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<ChartDataPoint> Items { get; set; } = [];
+
+    private IReadOnlyList<ChartDataPoint> VisibleItems => Items
+        .Where(item => item.Value > 0)
+        .ToList();
+
+    private decimal Total => VisibleItems.Sum(item => item.Value);
+
+    private string BuildDonutStyle()
+    {
+        if (Total <= 0)
+        {
+            return "background: #edf2f7;";
+        }
+
+        var start = 0m;
+        var segments = new List<string>();
+        foreach (var item in VisibleItems)
+        {
+            var end = start + (item.Value / Total * 100m);
+            segments.Add($"{item.Color} {(double)start:0.##}% {(double)end:0.##}%");
+            start = end;
+        }
+
+        return $"background: conic-gradient({string.Join(", ", segments)});";
+    }
+
+    private static string FormatValue(decimal value)
+    {
+        return value % 1 == 0 ? value.ToString("N0") : value.ToString("N2");
+    }
+}

@@ -1,0 +1,267 @@
+@page "/dashboard"
+@attribute [Authorize(Roles = "USER,ADMIN")]
+@inject ICurrentUserService CurrentUser
+@inject IAccountService AccountService
+@inject ITransactionService TransactionService
+@inject INotificationService NotificationService
+
+<PageTitle>Хэрэглэгчийн самбар</PageTitle>
+
+<h1>Хэрэглэгчийн самбар</h1>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert alert-warning" role="alert">@errorMessage</div>
+}
+else
+{
+    <p>Сайн байна уу, @DisplayName.</p>
+
+    @if (unreadNotifications.Count > 0)
+    {
+        <section class="border rounded p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h5 mb-0">Мэдэгдэл</h2>
+                <span class="badge text-bg-primary">@unreadNotifications.Count</span>
+            </div>
+            @foreach (var notification in unreadNotifications)
+            {
+                <div class="border-top pt-2 mt-2">
+                    <div class="fw-semibold">@notification.Title</div>
+                    <div>@notification.Message</div>
+                    <div class="small text-muted">@notification.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                </div>
+            }
+        </section>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-3">
+            <div class="border rounded p-3">
+                <div class="text-muted">Нийт данс</div>
+                <div class="fs-4">@summary.TotalAccounts</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="border rounded p-3">
+                <div class="text-muted">Идэвхтэй данс</div>
+                <div class="fs-4">@summary.ActiveAccountCount</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="border rounded p-3">
+                <div class="text-muted">MNT үлдэгдэл</div>
+                <div class="fs-4">@FormatMoney(summary.TotalMntBalance) MNT</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="border rounded p-3">
+                <div class="text-muted">USD үлдэгдэл</div>
+                <div class="fs-4">@FormatMoney(summary.TotalUsdBalance) USD</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-xl-6">
+            <BarChart Title="Дансны үлдэгдэл"
+                      Subtitle="Валют бүрээр нэгтгэсэн үлдэгдэл"
+                      Items="@BalanceByCurrencyChart" />
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <DonutChart Title="Дансны төлөв"
+                        Subtitle="Идэвхтэй болон идэвхгүй данс"
+                        Unit="данс"
+                        Items="@AccountStatusChart" />
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <DonutChart Title="Гүйлгээний чиглэл"
+                        Subtitle="Сүүлийн гүйлгээнүүдийн тоо"
+                        Unit="ш"
+                        Items="@TransactionDirectionChart" />
+        </div>
+        <div class="col-12">
+            <LineChart Title="Сүүлийн 7 өдрийн гүйлгээ"
+                       Subtitle="Өдөр бүрийн гүйлгээний тоо"
+                       Unit="ш"
+                       Items="@RecentTransactionTrendChart" />
+        </div>
+    </div>
+
+    <div class="mb-4 d-flex align-items-start gap-2">
+        <a class="btn btn-primary" href="/accounts">Миний дансууд</a>
+        <nav class="transfer-hover-nav" aria-label="Гүйлгээ хийх сонголт">
+            <menu>
+                <menuitem>
+                    <a href="/transactions/create">Гүйлгээ хийх</a>
+                    <menu>
+                        <menuitem><a href="/transactions/create?type=own">Өөрийн данс хооронд</a></menuitem>
+                        <menuitem><a href="/transactions/create?type=other">Бусдын данс руу</a></menuitem>
+                    </menu>
+                </menuitem>
+            </menu>
+        </nav>
+        <a class="btn btn-outline-primary" href="/transactions">Гүйлгээний түүх</a>
+    </div>
+
+    <h2 class="h5">Сүүлийн данснууд</h2>
+    @if (recentAccounts.Count == 0)
+    {
+        <p>Танд одоогоор данс байхгүй байна.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Дансны дугаар</th>
+                    <th>Валют</th>
+                    <th>Үлдэгдэл</th>
+                    <th>Төлөв</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var account in recentAccounts)
+                {
+                    <tr>
+                        <td>@account.AccountNumber</td>
+                        <td>@account.Currency</td>
+                        <td>@FormatMoney(account.Balance)</td>
+                        <td>@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h2 class="h5 mt-4">Сүүлийн гүйлгээнүүд</h2>
+    @if (recentTransactions.Count == 0)
+    {
+        <p>Танд одоогоор гүйлгээ байхгүй байна.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Огноо</th>
+                    <th>Чиглэл</th>
+                    <th>Дүн</th>
+                    <th>Орсон дүн</th>
+                    <th>Төлөв</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var transaction in recentTransactions)
+                {
+                    <tr>
+                        <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@DisplayDirection(transaction.Direction)</td>
+                        <td>@transaction.Amount.ToString("N2") @transaction.SourceCurrency</td>
+                        <td>@transaction.CreditedAmount.ToString("N2") @transaction.TargetCurrency</td>
+                        <td>@DisplayStatus(transaction.Status)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private BankWebApp.Web.DTOs.Accounts.AccountSummaryDto summary = new();
+    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> allAccounts = [];
+    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> recentAccounts = [];
+    private List<BankWebApp.Web.DTOs.Transactions.UserTransactionDto> recentTransactions = [];
+    private List<BankWebApp.Web.DTOs.Notifications.NotificationDto> unreadNotifications = [];
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    private string DisplayName => CurrentUser.FullName ?? CurrentUser.Username ?? "хэрэглэгч";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = CurrentUser.UserId;
+        if (userId is null)
+        {
+            errorMessage = "Та нэвтрээгүй байна.";
+            isLoading = false;
+            return;
+        }
+
+        summary = await AccountService.GetMyAccountSummaryAsync(userId.Value);
+        allAccounts = await AccountService.GetMyAccountsAsync(userId.Value);
+        recentAccounts = allAccounts.Take(3).ToList();
+        recentTransactions = await TransactionService.GetRecentMyTransactionsAsync(userId.Value);
+        unreadNotifications = await NotificationService.GetRecentUnreadNotificationsAsync(userId.Value);
+        isLoading = false;
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return value.ToString("N2");
+    }
+
+    private static string DisplayDirection(string direction)
+    {
+        return direction == "SENT" ? "Илгээсэн" : "Хүлээн авсан";
+    }
+
+    private static string DisplayStatus(string status)
+    {
+        return status == "SUCCESS" ? "Амжилттай" : status;
+    }
+
+    private IReadOnlyList<ChartDataPoint> BalanceByCurrencyChart => allAccounts
+        .GroupBy(account => account.Currency)
+        .OrderBy(group => group.Key)
+        .Select((group, index) => new ChartDataPoint
+        {
+            Label = group.Key,
+            Value = group.Sum(account => account.Balance),
+            Color = ChartColors[index % ChartColors.Length]
+        })
+        .ToList();
+
+    private IReadOnlyList<ChartDataPoint> AccountStatusChart =>
+    [
+        new() { Label = "Идэвхтэй", Value = summary.ActiveAccountCount, Color = "#16a34a" },
+        new() { Label = "Идэвхгүй", Value = Math.Max(0, summary.TotalAccounts - summary.ActiveAccountCount), Color = "#94a3b8" }
+    ];
+
+    private IReadOnlyList<ChartDataPoint> TransactionDirectionChart =>
+    [
+        new() { Label = "Илгээсэн", Value = recentTransactions.Count(transaction => transaction.Direction == "SENT"), Color = "#dc2626" },
+        new() { Label = "Хүлээн авсан", Value = recentTransactions.Count(transaction => transaction.Direction != "SENT"), Color = "#2563eb" }
+    ];
+
+    private IReadOnlyList<ChartDataPoint> RecentTransactionTrendChart
+    {
+        get
+        {
+            var today = MongoliaClock.Today;
+            return Enumerable.Range(0, 7)
+                .Select(offset => today.AddDays(offset - 6))
+                .Select(day => new ChartDataPoint
+                {
+                    Label = day.ToString("MM-dd"),
+                    Value = recentTransactions.Count(transaction => DateOnly.FromDateTime(transaction.CreatedAt) == day),
+                    Color = "#2563eb"
+                })
+                .ToList();
+        }
+    }
+
+    private static readonly string[] ChartColors =
+    [
+        "#2563eb",
+        "#16a34a",
+        "#f59e0b",
+        "#7c3aed",
+        "#0891b2",
+        "#dc2626"
+    ];
+}

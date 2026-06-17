@@ -1,0 +1,147 @@
+@page "/admin/transactions"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+
+<PageTitle>Админ - Бүх гүйлгээ</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>Бүх гүйлгээ</h1>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else
+{
+    <form class="row g-2 mb-3" method="get" action="/admin/transactions">
+        <div class="col-12 col-md-5">
+            <input class="form-control" name="search" value="@Search" placeholder="Данс, төлөв, утга хайх" />
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary" type="submit">Хайх</button>
+        </div>
+        <div class="col-auto">
+            <a class="btn btn-outline-secondary" href="/admin/transactions">Цэвэрлэх</a>
+        </div>
+    </form>
+}
+
+@if (!isLoading && transactions.Items.Count == 0)
+{
+    <p>Гүйлгээ олдсонгүй.</p>
+}
+else if (!isLoading)
+{
+    <table class="table table-striped align-middle">
+        <thead>
+            <tr>
+                <th>Огноо</th>
+                <th>Илгээгч</th>
+                <th>Хүлээн авагч</th>
+                <th>Дүн</th>
+                <th>Орсон дүн</th>
+                <th>Төлөв</th>
+                <th>Сэжигтэй</th>
+                <th>FastAPI шалгалт</th>
+                <th>Оноо</th>
+                <th>Утга</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var transaction in transactions.Items)
+            {
+                <tr>
+                    <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td>@transaction.FromAccountNumber</td>
+                    <td>@transaction.ToAccountNumber</td>
+                    <td>@transaction.Amount.ToString("N2") @transaction.SourceCurrency</td>
+                    <td>@transaction.CreditedAmount.ToString("N2") @transaction.TargetCurrency</td>
+                    <td>@transaction.Status</td>
+                    <td>
+                        @if (transaction.IsSuspicious)
+                        {
+                            <a class="badge text-bg-danger text-decoration-none" href="/admin/suspicious-transactions/@transaction.Id">Тийм</a>
+                        }
+                        else
+                        {
+                            <span class="badge text-bg-light border">Үгүй</span>
+                        }
+                    </td>
+                    <td>
+                        <span class="badge @DetectionBadgeClass(transaction.DetectionStatus)">@DisplayDetectionStatus(transaction.DetectionStatus)</span>
+                        @if (transaction.DetectionLoggedAt is not null)
+                        {
+                            <div class="small text-muted">@transaction.DetectionLoggedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                        }
+                    </td>
+                    <td>
+                        @if (transaction.DetectionRiskScore is null)
+                        {
+                            <span>-</span>
+                        }
+                        else
+                        {
+                            <span>@transaction.DetectionRiskScore.Value.ToString("N2")</span>
+                        }
+                    </td>
+                    <td>@transaction.Description</td>
+                </tr>
+                @if (!string.IsNullOrWhiteSpace(transaction.DetectionReason))
+                {
+                    <tr>
+                        <td colspan="10" class="small text-muted">
+                            <span class="fw-semibold">Detection тайлбар:</span> @transaction.DetectionReason
+                            @if (!string.IsNullOrWhiteSpace(transaction.DetectionTriggeredRules))
+                            {
+                                <span class="ms-2"><span class="fw-semibold">Rules:</span> @transaction.DetectionTriggeredRules</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+
+    <AdminPager BasePath="/admin/transactions" Page="@transactions.Page" TotalPages="@transactions.TotalPages" Search="@Search" />
+}
+
+@code {
+    private AdminPagedResultDto<AdminTransactionDto> transactions = new();
+    private bool isLoading = true;
+
+    [SupplyParameterFromQuery]
+    private string? Search { get; set; }
+
+    [SupplyParameterFromQuery]
+    private int Page { get; set; } = 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        transactions = await AdminService.GetTransactionsAsync(Search, Page);
+        isLoading = false;
+    }
+
+    private static string DisplayDetectionStatus(string? status)
+    {
+        return status switch
+        {
+            "CHECKED" => "Шалгасан",
+            "UNAVAILABLE" => "Service алдаа",
+            null or "" => "Шалгаагүй",
+            _ => status
+        };
+    }
+
+    private static string DetectionBadgeClass(string? status)
+    {
+        return status switch
+        {
+            "CHECKED" => "text-bg-success",
+            "UNAVAILABLE" => "text-bg-warning",
+            null or "" => "text-bg-secondary",
+            _ => "text-bg-light border"
+        };
+    }
+}
