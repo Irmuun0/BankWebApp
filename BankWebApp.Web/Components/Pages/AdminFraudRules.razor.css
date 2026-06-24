@@ -1,0 +1,29 @@
+.input-help-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.table th {
+    vertical-align: bottom;
+    white-space: nowrap;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+.table td:first-child {
+    white-space: normal;
+}
+
+.table input[type="number"] {
+    min-width: 5.5rem;
+}
+
+@media (max-width: 992px) {
+    .table th {
+        white-space: normal;
+    }
+}

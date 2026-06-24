@@ -123,10 +123,10 @@ else
 
 @code {
     [SupplyParameterFromQuery]
-    private string? Error { get; set; }
+    public string? Error { get; set; }
 
     [SupplyParameterFromQuery]
-    private string? Success { get; set; }
+    public string? Success { get; set; }
 
     private List<BankWebApp.Web.DTOs.Accounts.AccountDto> activeAccounts = [];
     private List<BankWebApp.Web.DTOs.Accounts.AccountDto> inactiveAccounts = [];

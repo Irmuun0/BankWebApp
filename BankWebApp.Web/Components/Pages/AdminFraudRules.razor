@@ -1,0 +1,237 @@
+@page "/admin/fraud-rules"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+
+<PageTitle>Админ - Fraud rule тохиргоо</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1>Rule-based detection тохиргоо</h1>
+        <div class="text-muted small">Rule бүрийн enable/disable, оноо, threshold утгыг удирдана. Өөрчлөлт дараагийн гүйлгээнээс шууд ашиглагдана.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success">@Success</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger">@Error</div>
+}
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else if (pageModel.Rules.Count == 0)
+{
+    <div class="alert alert-warning">
+        Rule тохиргоо олдсонгүй. Migration <code>20260617_010_add_fraud_rule_settings.sql</code>-г ажиллуулсан эсэхээ шалгана уу.
+    </div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        <SummaryCard Title="Нийт rule" Value="@pageModel.Rules.Count.ToString("N0")" />
+        <SummaryCard Title="Идэвхтэй rule" Value="@pageModel.Rules.Count(setting => setting.IsEnabled).ToString("N0")" />
+        <SummaryCard Title="Сэжигтэй босго" Value="@($"{pageModel.SuspiciousThreshold} / 100")" />
+        <SummaryCard Title="Дундаж score" Value="@($"{pageModel.Rules.Average(setting => setting.Score):N1}")" />
+    </div>
+
+    <section class="border rounded p-3 mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3">
+            <div>
+                <h2 class="h5 mb-1">Глобал сэжигтэй босго</h2>
+                <div class="text-muted small">
+                    Rule-үүдийн оноо нийлээд энэ босгоос их эсвэл тэнцүү болсон үед гүйлгээ сэжигтэй гэж тооцогдоно.
+                    @if (pageModel.ThresholdUpdatedAt is not null)
+                    {
+                        <span>Сүүлд шинэчилсэн: @pageModel.ThresholdUpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                    }
+                </div>
+            </div>
+            <form class="d-flex align-items-end gap-2" method="post" action="/admin/fraud-rules/threshold">
+                <div>
+                    <label class="form-label small" for="SuspiciousThreshold">Босго оноо</label>
+                    <input id="SuspiciousThreshold" class="form-control" type="number" name="SuspiciousThreshold" min="1" max="100" value="@pageModel.SuspiciousThreshold" />
+                </div>
+                <button class="btn btn-primary" type="submit">Босго хадгалах</button>
+            </form>
+        </div>
+    </section>
+
+    <div class="alert alert-light border small">
+        <strong>Тайлбар:</strong> <code>Numeric threshold</code> нь rule-ээсээ хамаараад тоо, multiplier, цаг, хоног эсвэл харьцаа байдлаар хэрэглэгдэнэ.
+        MNT/USD threshold нь дүнтэй холбоотой rule-үүдэд ашиглагдана.
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Rule</th>
+                    <th>Идэвхтэй</th>
+                    <th>
+                        Score
+                        <HelpTooltip Placement="bottom" Text="Rule зөрчигдвөл нийт risk score дээр нэмэгдэх оноо. 0 бол rule илэрсэн ч оноо нэмэхгүй." />
+                    </th>
+                    <th>
+                        Numeric threshold
+                        <HelpTooltip Placement="bottom" Text="Rule-ээсээ хамаараад multiplier, тоо, цаг, хоног эсвэл хувь гэсэн утгатай. Зөвхөн тухайн rule ашигладаг үед харагдана." />
+                    </th>
+                    <th>
+                        MNT threshold
+                        <HelpTooltip Placement="bottom" Text="MNT гүйлгээний дүнгийн босго. Гүйлгээний дүн энэ утгад хүрвэл тухайн rule зөрчигдөх боломжтой." />
+                    </th>
+                    <th>
+                        USD threshold
+                        <HelpTooltip Placement="bottom" Text="USD гүйлгээний дүнгийн босго. Гүйлгээний дүн энэ утгад хүрвэл тухайн rule зөрчигдөх боломжтой." />
+                    </th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var setting in pageModel.Rules)
+                {
+                    var formId = $"fraud-rule-form-{setting.Id}";
+                    <tr>
+                        <td style="min-width: 260px;">
+                            <div class="fw-semibold">@setting.DisplayName</div>
+                            <div class="small text-muted">@setting.RuleCode</div>
+                            @if (!string.IsNullOrWhiteSpace(setting.Description))
+                            {
+                                <div class="small">@setting.Description</div>
+                            }
+                            <div class="small text-muted mt-1">
+                                Шинэчилсэн: @setting.UpdatedAt.ToString("yyyy-MM-dd HH:mm")
+                                @if (!string.IsNullOrWhiteSpace(setting.UpdatedByUsername))
+                                {
+                                    <span> / @setting.UpdatedByUsername</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <form id="@formId" method="post" action="/admin/fraud-rules/update"></form>
+                            <input form="@formId" type="hidden" name="Id" value="@setting.Id" />
+                            <div class="form-check form-switch">
+                                <input form="@formId" class="form-check-input" type="checkbox" name="IsEnabled" value="true" checked="@setting.IsEnabled" />
+                            </div>
+                        </td>
+                        <td style="min-width: 90px;">
+                            <input form="@formId" class="form-control form-control-sm" type="number" name="Score" min="0" max="100" value="@setting.Score" />
+                        </td>
+                        <td style="min-width: 140px;">
+                            @if (UsesNumericThreshold(setting.RuleCode))
+                            {
+                                <div class="input-help-wrap">
+                                    <input form="@formId" class="form-control form-control-sm" type="number" step="0.0001" name="NumericThreshold" value="@FormatNullable(setting.NumericThreshold)" />
+                                    <HelpTooltip Text="@GetNumericThresholdHelp(setting.RuleCode)" />
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Ашиглахгүй</span>
+                            }
+                        </td>
+                        <td style="min-width: 150px;">
+                            @if (UsesAmountThreshold(setting.RuleCode))
+                            {
+                                <div class="input-help-wrap">
+                                    <input form="@formId" class="form-control form-control-sm" type="number" step="0.01" name="AmountThresholdMnt" value="@FormatNullable(setting.AmountThresholdMnt)" />
+                                    <HelpTooltip Text="MNT гүйлгээ энэ дүнгээс их эсвэл тэнцүү үед rule шалгагдана." />
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Ашиглахгүй</span>
+                            }
+                        </td>
+                        <td style="min-width: 140px;">
+                            @if (UsesAmountThreshold(setting.RuleCode))
+                            {
+                                <div class="input-help-wrap">
+                                    <input form="@formId" class="form-control form-control-sm" type="number" step="0.01" name="AmountThresholdUsd" value="@FormatNullable(setting.AmountThresholdUsd)" />
+                                    <HelpTooltip Text="USD гүйлгээ энэ дүнгээс их эсвэл тэнцүү үед rule шалгагдана." />
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Ашиглахгүй</span>
+                            }
+                        </td>
+                        <td>
+                            <button form="@formId" class="btn btn-sm btn-primary" type="submit">Хадгалах</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private AdminFraudRuleSettingsPageDto pageModel = new();
+    private bool isLoading = true;
+
+    [SupplyParameterFromQuery]
+    public string? Success { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        pageModel = await AdminService.GetFraudRuleSettingsAsync();
+        isLoading = false;
+    }
+
+    private static string? FormatNullable(decimal? value)
+    {
+        return value?.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static bool UsesNumericThreshold(string ruleCode)
+    {
+        return ruleCode is
+            "HIGH_AMOUNT_COMPARED_TO_AVERAGE" or
+            "NIGHT_TIME_TRANSACTION" or
+            "MANY_TRANSACTIONS_LAST_24_HOURS" or
+            "MANY_SMALL_TRANSACTIONS" or
+            "RAPID_IN_OUT_FLOW" or
+            "NEW_ACCOUNT_HIGH_AMOUNT" or
+            "DORMANT_ACCOUNT_ACTIVITY" or
+            "MANY_RECEIVERS_SHORT_TIME" or
+            "MANY_SENDERS_TO_ONE_ACCOUNT";
+    }
+
+    private static bool UsesAmountThreshold(string ruleCode)
+    {
+        return ruleCode is
+            "VERY_HIGH_AMOUNT" or
+            "HIGH_CROSS_CURRENCY_TRANSACTION" or
+            "STRUCTURING_SMALL_SPLIT_TRANSFERS" or
+            "NEW_ACCOUNT_HIGH_AMOUNT" or
+            "DORMANT_ACCOUNT_ACTIVITY" or
+            "DESCRIPTION_AMOUNT_MISMATCH";
+    }
+
+    private static string GetNumericThresholdHelp(string ruleCode)
+    {
+        return ruleCode switch
+        {
+            "HIGH_AMOUNT_COMPARED_TO_AVERAGE" => "Дундаж гүйлгээний дүнгээс хэд дахин их байвал rule зөрчих вэ. Жишээ: 3 гэвэл 3 дахин их.",
+            "NIGHT_TIME_TRANSACTION" => "Шөнийн цагийн дээд хязгаар. Жишээ: 6 гэвэл 00:00-05:59 хооронд хийсэн гүйлгээ.",
+            "MANY_TRANSACTIONS_LAST_24_HOURS" => "Сүүлийн 24 цагт хийсэн гүйлгээний тоо энэ утгад хүрвэл rule зөрчинө.",
+            "MANY_SMALL_TRANSACTIONS" => "Сүүлийн 24 цагт хийсэн жижиг гүйлгээний тоо энэ утгад хүрвэл rule зөрчинө.",
+            "RAPID_IN_OUT_FLOW" => "Сүүлийн 30 минутын орлогоос хэдэн хувийг гаргавал rule зөрчих вэ. Жишээ: 0.8 гэвэл 80%.",
+            "NEW_ACCOUNT_HIGH_AMOUNT" => "Данс хэдэн хоногоос шинэ гэж тооцогдох вэ. Жишээ: 7 гэвэл 7 хоног хүртэл.",
+            "DORMANT_ACCOUNT_ACTIVITY" => "Хэдэн хоног гүйлгээгүй бол идэвхгүй данс гэж үзэх вэ.",
+            "MANY_RECEIVERS_SHORT_TIME" => "24 цагт хэдэн өөр хүлээн авагч руу шилжүүлбэл rule зөрчих вэ.",
+            "MANY_SENDERS_TO_ONE_ACCOUNT" => "24 цагт хэдэн өөр илгээгч нэг данс руу мөнгө илгээвэл rule зөрчих вэ.",
+            _ => "Энэ rule-ийн тоон босго."
+        };
+    }
+}

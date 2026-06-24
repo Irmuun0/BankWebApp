@@ -1,0 +1,51 @@
+@using BankWebApp.Web.DTOs.Transactions
+
+@if (Receipt is not null)
+{
+    <div class="modal-backdrop show"></div>
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5">Гүйлгээний дэлгэрэнгүй</h2>
+                    <a class="btn-close" href="@CloseHref" aria-label="Хаах"></a>
+                </div>
+                <div class="modal-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Гүйлгээний дугаар</dt>
+                        <dd class="col-sm-7">@Receipt.Id</dd>
+
+                        <dt class="col-sm-5">Огноо цаг</dt>
+                        <dd class="col-sm-7">@Receipt.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+
+                        <dt class="col-sm-5">Шилжүүлсэн дүн</dt>
+                        <dd class="col-sm-7">@Receipt.Amount.ToString("N2") @Receipt.SourceCurrency</dd>
+
+                        <dt class="col-sm-5">Үлдсэн үлдэгдэл</dt>
+                        <dd class="col-sm-7">@Receipt.SenderRemainingBalance.ToString("N2")</dd>
+
+                        <dt class="col-sm-5">Хүлээн авагч</dt>
+                        <dd class="col-sm-7">@Receipt.ReceiverOwnerName</dd>
+
+                        <dt class="col-sm-5">Хүлээн авах данс</dt>
+                        <dd class="col-sm-7">@Receipt.ReceiverAccountNumber</dd>
+
+                        <dt class="col-sm-5">Гүйлгээний утга</dt>
+                        <dd class="col-sm-7">@(string.IsNullOrWhiteSpace(Receipt.Description) ? "-" : Receipt.Description)</dd>
+                    </dl>
+                </div>
+                <div class="modal-footer">
+                    <a class="btn btn-primary" href="@CloseHref">Хаах</a>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public TransactionReceiptDto? Receipt { get; set; }
+
+    [Parameter]
+    public string CloseHref { get; set; } = "/";
+}

@@ -314,10 +314,10 @@ else
     private AdminCurrencyRateOverrideScheduleDto? selectedSchedule;
 
     [SupplyParameterFromQuery]
-    private string? Success { get; set; }
+    public string? Success { get; set; }
 
     [SupplyParameterFromQuery]
-    private string? Error { get; set; }
+    public string? Error { get; set; }
 
     private DateTime DefaultStartAt => TrimToMinute(MongoliaClock.Now);
 

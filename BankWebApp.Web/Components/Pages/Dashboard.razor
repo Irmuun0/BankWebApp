@@ -3,7 +3,6 @@
 @inject ICurrentUserService CurrentUser
 @inject IAccountService AccountService
 @inject ITransactionService TransactionService
-@inject INotificationService NotificationService
 
 <PageTitle>Хэрэглэгчийн самбар</PageTitle>
 
@@ -21,22 +20,26 @@ else
 {
     <p>Сайн байна уу, @DisplayName.</p>
 
-    @if (unreadNotifications.Count > 0)
+    @if (selectedAccount is not null)
     {
-        <section class="border rounded p-3 mb-4">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <h2 class="h5 mb-0">Мэдэгдэл</h2>
-                <span class="badge text-bg-primary">@unreadNotifications.Count</span>
-            </div>
-            @foreach (var notification in unreadNotifications)
-            {
-                <div class="border-top pt-2 mt-2">
-                    <div class="fw-semibold">@notification.Title</div>
-                    <div>@notification.Message</div>
-                    <div class="small text-muted">@notification.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+        <form class="border rounded p-3 mb-4" method="get" action="/dashboard">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-5">
+                    <label class="form-label" for="accountId">Харах данс</label>
+                    <select class="form-select" id="accountId" name="accountId">
+                        @foreach (var account in allAccounts)
+                        {
+                            <option value="@account.Id" selected="@(account.Id == selectedAccount.Id)">
+                                @account.AccountNumber - @DisplayAccountType(account.AccountType)/@account.Currency (@FormatMoney(account.Balance))
+                            </option>
+                        }
+                    </select>
                 </div>
-            }
-        </section>
+                <div class="col-12 col-lg-auto">
+                    <button class="btn btn-outline-primary" type="submit">Сонгох</button>
+                </div>
+            </div>
+        </form>
     }
 
     <div class="row g-3 mb-4">
@@ -80,13 +83,13 @@ else
         </div>
         <div class="col-12 col-md-6 col-xl-3">
             <DonutChart Title="Гүйлгээний чиглэл"
-                        Subtitle="Сүүлийн гүйлгээнүүдийн тоо"
+                        Subtitle="Сонгосон дансны сүүлийн гүйлгээнүүд"
                         Unit="ш"
                         Items="@TransactionDirectionChart" />
         </div>
         <div class="col-12">
             <LineChart Title="Сүүлийн 7 өдрийн гүйлгээ"
-                       Subtitle="Өдөр бүрийн гүйлгээний тоо"
+                       Subtitle="Сонгосон дансны өдөр бүрийн гүйлгээний тоо"
                        Unit="ш"
                        Items="@RecentTransactionTrendChart" />
         </div>
@@ -105,7 +108,7 @@ else
                 </menuitem>
             </menu>
         </nav>
-        <a class="btn btn-outline-primary" href="/transactions">Гүйлгээний түүх</a>
+        <a class="btn btn-outline-primary" href="@TransactionsHref">Гүйлгээний түүх</a>
     </div>
 
     <h2 class="h5">Сүүлийн данснууд</h2>
@@ -128,7 +131,13 @@ else
                 @foreach (var account in recentAccounts)
                 {
                     <tr>
-                        <td>@account.AccountNumber</td>
+                        <td>
+                            @if (account.IsPrimary)
+                            {
+                                <span class="badge text-bg-primary me-1" title="Үндсэн данс">★</span>
+                            }
+                            @account.AccountNumber
+                        </td>
                         <td>@account.Currency</td>
                         <td>@FormatMoney(account.Balance)</td>
                         <td>@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</td>
@@ -139,13 +148,18 @@ else
     }
 
     <h2 class="h5 mt-4">Сүүлийн гүйлгээнүүд</h2>
+    @if (selectedAccount is not null)
+    {
+        <p class="text-muted mb-2">@selectedAccount.AccountNumber дансны сүүлийн гүйлгээнүүд</p>
+    }
+
     @if (recentTransactions.Count == 0)
     {
-        <p>Танд одоогоор гүйлгээ байхгүй байна.</p>
+        <p>Сонгосон дансанд одоогоор гүйлгээ байхгүй байна.</p>
     }
     else
     {
-        <table class="table">
+        <table class="table table-hover">
             <thead>
                 <tr>
                     <th>Огноо</th>
@@ -158,7 +172,7 @@ else
             <tbody>
                 @foreach (var transaction in recentTransactions)
                 {
-                    <tr>
+                    <tr role="button" onclick="window.location.href='@BuildDashboardTransactionDetailHref(transaction.Id)'">
                         <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                         <td>@DisplayDirection(transaction.Direction)</td>
                         <td>@transaction.Amount.ToString("N2") @transaction.SourceCurrency</td>
@@ -171,18 +185,31 @@ else
     }
 }
 
+<TransactionDetailModal Receipt="@selectedReceipt" CloseHref="@BuildDashboardCloseHref()" />
+
 @code {
+    [SupplyParameterFromQuery(Name = "accountId")]
+    public long? AccountId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "detail")]
+    public long? DetailTransactionId { get; set; }
+
     private BankWebApp.Web.DTOs.Accounts.AccountSummaryDto summary = new();
     private List<BankWebApp.Web.DTOs.Accounts.AccountDto> allAccounts = [];
     private List<BankWebApp.Web.DTOs.Accounts.AccountDto> recentAccounts = [];
     private List<BankWebApp.Web.DTOs.Transactions.UserTransactionDto> recentTransactions = [];
-    private List<BankWebApp.Web.DTOs.Notifications.NotificationDto> unreadNotifications = [];
+    private BankWebApp.Web.DTOs.Accounts.AccountDto? selectedAccount;
+    private BankWebApp.Web.DTOs.Transactions.TransactionReceiptDto? selectedReceipt;
     private bool isLoading = true;
     private string? errorMessage;
 
     private string DisplayName => CurrentUser.FullName ?? CurrentUser.Username ?? "хэрэглэгч";
 
-    protected override async Task OnInitializedAsync()
+    private string TransactionsHref => selectedAccount is null
+        ? "/transactions"
+        : $"/transactions?accountId={selectedAccount.Id}";
+
+    protected override async Task OnParametersSetAsync()
     {
         var userId = CurrentUser.UserId;
         if (userId is null)
@@ -195,9 +222,35 @@ else
         summary = await AccountService.GetMyAccountSummaryAsync(userId.Value);
         allAccounts = await AccountService.GetMyAccountsAsync(userId.Value);
         recentAccounts = allAccounts.Take(3).ToList();
-        recentTransactions = await TransactionService.GetRecentMyTransactionsAsync(userId.Value);
-        unreadNotifications = await NotificationService.GetRecentUnreadNotificationsAsync(userId.Value);
+        selectedAccount = ResolveSelectedAccount();
+
+        if (selectedAccount is not null)
+        {
+            recentTransactions = await TransactionService.GetRecentMyTransactionsAsync(userId.Value, selectedAccount.Id);
+        }
+
+        if (DetailTransactionId is not null)
+        {
+            selectedReceipt = await TransactionService.GetMyTransactionReceiptAsync(userId.Value, DetailTransactionId.Value);
+        }
+
         isLoading = false;
+    }
+
+    private BankWebApp.Web.DTOs.Accounts.AccountDto? ResolveSelectedAccount()
+    {
+        if (AccountId is not null)
+        {
+            var requested = allAccounts.FirstOrDefault(account => account.Id == AccountId.Value);
+            if (requested is not null)
+            {
+                return requested;
+            }
+        }
+
+        return allAccounts.FirstOrDefault(account => account.IsPrimary)
+            ?? allAccounts.FirstOrDefault(account => account.IsActive)
+            ?? allAccounts.FirstOrDefault();
     }
 
     private static string FormatMoney(decimal value)
@@ -213,6 +266,22 @@ else
     private static string DisplayStatus(string status)
     {
         return status == "SUCCESS" ? "Амжилттай" : status;
+    }
+
+    private static string DisplayAccountType(string accountType)
+    {
+        return accountType == "CHECKING" ? "Харилцах" : accountType;
+    }
+
+    private string BuildDashboardTransactionDetailHref(long transactionId)
+    {
+        var accountQuery = selectedAccount is null ? string.Empty : $"accountId={selectedAccount.Id}&";
+        return $"/dashboard?{accountQuery}detail={transactionId}";
+    }
+
+    private string BuildDashboardCloseHref()
+    {
+        return selectedAccount is null ? "/dashboard" : $"/dashboard?accountId={selectedAccount.Id}";
     }
 
     private IReadOnlyList<ChartDataPoint> BalanceByCurrencyChart => allAccounts

@@ -45,7 +45,13 @@ else
             @foreach (var account in accounts)
             {
                 <tr>
-                    <td>@account.AccountNumber</td>
+                    <td>
+                        @if (account.IsPrimary)
+                        {
+                            <span class="badge text-bg-primary me-1" title="Үндсэн данс">★ Үндсэн данс</span>
+                        }
+                        @account.AccountNumber
+                    </td>
                     <td>@DisplayAccountType(account.AccountType)</td>
                     <td>@account.Currency</td>
                     <td>@account.Balance.ToString("N2")</td>

@@ -45,23 +45,25 @@ builder.Services.AddAuthorization();
 
 var defaultConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<BankDbContext>(options =>
-    options.UseSqlServer(defaultConnectionString));
+    options.UseSqlServer(defaultConnectionString),
+    ServiceLifetime.Transient);
 builder.Services.AddDbContextFactory<BankDbContext>(options =>
     options.UseSqlServer(defaultConnectionString),
     ServiceLifetime.Scoped);
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddTransient<IAuthService, AuthService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
-builder.Services.AddScoped<IAccountService, AccountService>();
-builder.Services.AddScoped<ITransactionService, TransactionService>();
-builder.Services.AddScoped<IAdminService, AdminService>();
-builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddScoped<IPasswordPolicyService, PasswordPolicyService>();
-builder.Services.AddScoped<ISecurityEventService, SecurityEventService>();
-builder.Services.AddScoped<IDatabaseClockService, DatabaseClockService>();
-builder.Services.AddScoped<IDatabaseTestService, DatabaseTestService>();
+builder.Services.AddTransient<IAccountService, AccountService>();
+builder.Services.AddTransient<ITransactionService, TransactionService>();
+builder.Services.AddTransient<IAdminService, AdminService>();
+builder.Services.AddTransient<INotificationService, NotificationService>();
+builder.Services.AddTransient<IPasswordPolicyService, PasswordPolicyService>();
+builder.Services.AddTransient<ISecurityEventService, SecurityEventService>();
+builder.Services.AddTransient<IDatabaseClockService, DatabaseClockService>();
+builder.Services.AddTransient<IDatabaseTestService, DatabaseTestService>();
 builder.Services.AddHttpClient<IAiDetectionService, AiDetectionService>();
+builder.Services.AddHttpClient<IGeminiAnalysisService, GeminiAnalysisService>();
 builder.Services.AddHttpClient<IExchangeRateService, MongolBankExchangeRateService>();
 
 var app = builder.Build();
@@ -214,6 +216,29 @@ app.MapPost("/accounts/toggle-status", async (HttpContext context, IAccountServi
     return Results.Redirect($"/accounts/settings?success={Uri.EscapeDataString(result.ErrorMessage ?? "Дансны төлөв шинэчлэгдлээ.")}");
 }).RequireAuthorization();
 
+app.MapPost("/accounts/set-primary", async (HttpContext context, IAccountService accountService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var userId))
+    {
+        return Results.Redirect("/?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/accounts");
+    if (!long.TryParse(form["AccountId"].ToString(), out var accountId))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Дансны мэдээлэл буруу байна."));
+    }
+
+    var result = await accountService.SetPrimaryAccountAsync(userId, accountId, cancellationToken);
+    if (!result.Success)
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", result.ErrorMessage ?? "Үндсэн данс тохируулах үед алдаа гарлаа."));
+    }
+
+    return Results.Redirect(AppendQuery(returnUrl, "success", result.ErrorMessage ?? "Үндсэн данс шинэчлэгдлээ."));
+}).RequireAuthorization();
+
 app.MapPost("/admin/users/toggle-status", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
 {
     if (!TryReadCurrentUserId(context, out var adminUserId))
@@ -279,12 +304,113 @@ app.MapPost("/admin/suspicious-transactions/review", async (HttpContext context,
             TransactionId = transactionId,
             ReviewStatus = form["ReviewStatus"].ToString(),
             ReviewNote = form["ReviewNote"].ToString(),
+            SendUserNotification = form.ContainsKey("SendUserNotification"),
+            UserNotificationMessage = form["UserNotificationMessage"].ToString(),
             ExpectedUpdatedAtTicks = expectedUpdatedAtTicks
         },
         cancellationToken);
 
     var queryName = result.Success ? "success" : "error";
     return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Review status шинэчлэх үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/ai-detection/analyze", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/ai-detection");
+    var transactionIds = form["TransactionId"]
+        .Select(value => long.TryParse(value, out var id) ? id : 0)
+        .Where(id => id > 0)
+        .ToList();
+
+    var result = await adminService.AnalyzeTransactionsWithAiAsync(adminUserId, transactionIds, form["ModelName"].ToString(), cancellationToken);
+    var queryName = result.Success ? "success" : "error";
+    return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "AI Detection ажиллуулах үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/ai-detection/chat", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/ai-detection");
+    if (!long.TryParse(form["TransactionId"].ToString(), out var transactionId))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "AI chat transaction буруу байна."));
+    }
+
+    var result = await adminService.AskAiDetectionQuestionAsync(
+        adminUserId,
+        transactionId,
+        form["Question"].ToString(),
+        form["ModelName"].ToString(),
+        cancellationToken);
+
+    var queryName = result.Success ? "success" : "error";
+    return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "AI chat ажиллуулах үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/fraud-rules/update", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    if (!int.TryParse(form["Id"].ToString(), out var id) ||
+        !int.TryParse(form["Score"].ToString(), out var score))
+    {
+        return Results.Redirect(AppendQuery("/admin/fraud-rules", "error", "Rule тохиргооны хүсэлт буруу байна."));
+    }
+
+    var dto = new UpdateFraudRuleSettingDto
+    {
+        Id = id,
+        IsEnabled = TryReadBoolean(form["IsEnabled"].ToString(), out var enabled) && enabled,
+        Score = score,
+        NumericThreshold = TryReadNullableDecimal(form["NumericThreshold"].ToString()),
+        AmountThresholdMnt = TryReadNullableDecimal(form["AmountThresholdMnt"].ToString()),
+        AmountThresholdUsd = TryReadNullableDecimal(form["AmountThresholdUsd"].ToString())
+    };
+
+    var result = await adminService.UpdateFraudRuleSettingAsync(adminUserId, dto, cancellationToken);
+    return Results.Redirect(AppendQuery(
+        "/admin/fraud-rules",
+        result.Success ? "success" : "error",
+        result.ErrorMessage ?? "Rule тохиргоо шинэчлэх үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/fraud-rules/threshold", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    if (!int.TryParse(form["SuspiciousThreshold"].ToString(), out var suspiciousThreshold))
+    {
+        return Results.Redirect(AppendQuery("/admin/fraud-rules", "error", "Сэжигтэй босго буруу байна."));
+    }
+
+    var result = await adminService.UpdateFraudDetectionSettingsAsync(
+        adminUserId,
+        new UpdateFraudDetectionSettingsDto { SuspiciousThreshold = suspiciousThreshold },
+        cancellationToken);
+
+    return Results.Redirect(AppendQuery(
+        "/admin/fraud-rules",
+        result.Success ? "success" : "error",
+        result.ErrorMessage ?? "Сэжигтэй босго шинэчлэх үед алдаа гарлаа."));
 }).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
 
 app.MapPost("/admin/exchange-rates/algorithm", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
@@ -525,6 +651,11 @@ static bool TryReadDecimal(string value, out decimal result)
 {
     return decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result)
         || decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result);
+}
+
+static decimal? TryReadNullableDecimal(string value)
+{
+    return string.IsNullOrWhiteSpace(value) ? null : TryReadDecimal(value, out var result) ? result : null;
 }
 
 static bool TryReadDateTime(string value, out DateTime result)

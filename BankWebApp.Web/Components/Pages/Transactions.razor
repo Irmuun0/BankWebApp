@@ -1,6 +1,7 @@
 @page "/transactions"
 @attribute [Authorize(Roles = "USER,ADMIN")]
 @inject ICurrentUserService CurrentUser
+@inject IAccountService AccountService
 @inject ITransactionService TransactionService
 
 <PageTitle>Гүйлгээний түүх</PageTitle>
@@ -19,75 +20,131 @@ else if (!string.IsNullOrWhiteSpace(errorMessage))
 {
     <div class="alert alert-warning" role="alert">@errorMessage</div>
 }
-else if (transactions.Count == 0)
-{
-    <p>Танд одоогоор гүйлгээ байхгүй байна.</p>
-}
 else
 {
-    <div class="row g-3 mb-4">
-        <div class="col-12 col-lg-4">
-            <DonutChart Title="Гүйлгээний чиглэл"
-                        Subtitle="Илгээсэн болон хүлээн авсан гүйлгээ"
-                        Unit="ш"
-                        Items="@TransactionDirectionChart" />
+    <form class="border rounded p-3 mb-4" method="get" action="/transactions">
+        <div class="row g-3 align-items-end">
+            <div class="col-12 col-lg-4">
+                <label class="form-label" for="accountId">Данс</label>
+                <select class="form-select" id="accountId" name="accountId">
+                    @foreach (var account in accounts)
+                    {
+                        <option value="@account.Id" selected="@(account.Id == selectedAccountId)">
+                            @account.AccountNumber - @DisplayAccountType(account.AccountType)/@account.Currency (@account.Balance.ToString("N2"))
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label" for="startDate">Эхлэх</label>
+                <input class="form-control" id="startDate" type="date" name="startDate" value="@filterStartDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label" for="endDate">Дуусах</label>
+                <input class="form-control" id="endDate" type="date" name="endDate" value="@filterEndDate.ToString("yyyy-MM-dd")" />
+            </div>
+            <div class="col-12 col-lg-4 d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" type="submit">Харах</button>
+                <a class="btn btn-outline-secondary" href="@BuildPresetHref("today")">Өнөөдөр</a>
+                <a class="btn btn-outline-secondary" href="@BuildPresetHref("last2")">Өнөөдөр + өчигдөр</a>
+                <a class="btn btn-outline-secondary" href="@BuildPresetHref("last7")">7 хоног</a>
+                <a class="btn btn-outline-secondary" href="@BuildPresetHref("last30")">30 хоног</a>
+            </div>
         </div>
-        <div class="col-12 col-lg-4">
-            <DonutChart Title="Гүйлгээний төлөв"
-                        Subtitle="Амжилттай болон бусад төлөв"
-                        Unit="ш"
-                        Items="@TransactionStatusChart" />
-        </div>
-        <div class="col-12 col-lg-4">
-            <BarChart Title="Орлого, зарлагын бүтэц"
-                      Subtitle="Валют болон чиглэлээр нэгтгэсэн дүн"
-                      Items="@CashflowByCurrencyChart" />
-        </div>
-        <div class="col-12">
-            <LineChart Title="Сүүлийн 14 өдрийн идэвх"
-                       Subtitle="Өдөр бүрийн гүйлгээний тоо"
-                       Unit="ш"
-                       Items="@TransactionTrendChart" />
-        </div>
-    </div>
+    </form>
 
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Огноо</th>
-                <th>Чиглэл</th>
-                <th>Илгээгч</th>
-                <th>Хүлээн авагч</th>
-                <th>Дүн</th>
-                <th>Орсон дүн</th>
-                <th>Төлөв</th>
-                <th>Тайлбар</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var transaction in transactions)
-            {
+    @if (transactions.Count == 0)
+    {
+        <p>Сонгосон хугацаанд гүйлгээ байхгүй байна.</p>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-lg-4">
+                <DonutChart Title="Гүйлгээний чиглэл"
+                            Subtitle="Сонгосон дансны орлого, зарлага"
+                            Unit="ш"
+                            Items="@TransactionDirectionChart" />
+            </div>
+            <div class="col-12 col-lg-4">
+                <DonutChart Title="Гүйлгээний төлөв"
+                            Subtitle="Амжилттай болон бусад төлөв"
+                            Unit="ш"
+                            Items="@TransactionStatusChart" />
+            </div>
+            <div class="col-12 col-lg-4">
+                <BarChart Title="Орлого, зарлагын бүтэц"
+                          Subtitle="Валют болон чиглэлээр нэгтгэсэн дүн"
+                          Items="@CashflowByCurrencyChart" />
+            </div>
+            <div class="col-12">
+                <LineChart Title="Өдрийн идэвх"
+                           Subtitle="Сонгосон хугацааны өдөр бүрийн гүйлгээний тоо"
+                           Unit="ш"
+                           Items="@TransactionTrendChart" />
+            </div>
+        </div>
+
+        <table class="table table-hover">
+            <thead>
                 <tr>
-                    <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                    <td>@DisplayDirection(transaction.Direction)</td>
-                    <td>@transaction.FromAccountNumber</td>
-                    <td>@transaction.ToAccountNumber</td>
-                    <td>@transaction.Amount.ToString("N2") @transaction.SourceCurrency</td>
-                    <td>@transaction.CreditedAmount.ToString("N2") @transaction.TargetCurrency</td>
-                    <td>@DisplayStatus(transaction.Status)</td>
-                    <td>@transaction.Description</td>
+                    <th>Огноо</th>
+                    <th>Чиглэл</th>
+                    <th>Илгээгч</th>
+                    <th>Хүлээн авагч</th>
+                    <th>Дүн</th>
+                    <th>Орсон дүн</th>
+                    <th>Төлөв</th>
+                    <th>Гүйлгээний утга</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var transaction in transactions)
+                {
+                    <tr role="button" onclick="window.location.href='@BuildDetailHref(transaction.Id)'">
+                        <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@DisplayDirection(transaction.Direction)</td>
+                        <td>@transaction.FromAccountNumber</td>
+                        <td>@transaction.ToAccountNumber</td>
+                        <td>@transaction.Amount.ToString("N2") @transaction.SourceCurrency</td>
+                        <td>@transaction.CreditedAmount.ToString("N2") @transaction.TargetCurrency</td>
+                        <td>@DisplayStatus(transaction.Status)</td>
+                        <td>@transaction.Description</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }
 
+<TransactionDetailModal Receipt="@selectedReceipt" CloseHref="@BuildCloseHref()" />
+
 @code {
+    [SupplyParameterFromQuery(Name = "accountId")]
+    public long? AccountId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "startDate")]
+    public DateOnly? StartDate { get; set; }
+
+    [SupplyParameterFromQuery(Name = "endDate")]
+    public DateOnly? EndDate { get; set; }
+
+    [SupplyParameterFromQuery(Name = "range")]
+    public string? Range { get; set; }
+
+    [SupplyParameterFromQuery(Name = "detail")]
+    public long? DetailTransactionId { get; set; }
+
+    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> accounts = [];
     private List<BankWebApp.Web.DTOs.Transactions.UserTransactionDto> transactions = [];
+    private BankWebApp.Web.DTOs.Transactions.TransactionReceiptDto? selectedReceipt;
     private bool isLoading = true;
     private string? errorMessage;
+    private long selectedAccountId;
+    private DateOnly filterStartDate;
+    private DateOnly filterEndDate;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
         var userId = CurrentUser.UserId;
         if (userId is null)
@@ -97,8 +154,85 @@ else
             return;
         }
 
-        transactions = await TransactionService.GetMyTransactionsAsync(userId.Value);
+        accounts = await AccountService.GetMyAccountsAsync(userId.Value);
+        var selectedAccount = ResolveSelectedAccount();
+        if (selectedAccount is null)
+        {
+            errorMessage = "Гүйлгээ харах данс олдсонгүй.";
+            isLoading = false;
+            return;
+        }
+
+        selectedAccountId = selectedAccount.Id;
+        ResolveDateRange();
+        transactions = await TransactionService.GetMyTransactionsAsync(
+            userId.Value,
+            selectedAccountId,
+            filterStartDate,
+            filterEndDate);
+
+        if (DetailTransactionId is not null)
+        {
+            selectedReceipt = await TransactionService.GetMyTransactionReceiptAsync(userId.Value, DetailTransactionId.Value);
+        }
+
         isLoading = false;
+    }
+
+    private BankWebApp.Web.DTOs.Accounts.AccountDto? ResolveSelectedAccount()
+    {
+        if (AccountId is not null)
+        {
+            var requested = accounts.FirstOrDefault(account => account.Id == AccountId.Value);
+            if (requested is not null)
+            {
+                return requested;
+            }
+        }
+
+        return accounts.FirstOrDefault(account => account.IsPrimary)
+            ?? accounts.FirstOrDefault(account => account.IsActive)
+            ?? accounts.FirstOrDefault();
+    }
+
+    private void ResolveDateRange()
+    {
+        var today = MongoliaClock.Today;
+        (filterStartDate, filterEndDate) = Range switch
+        {
+            "today" => (today, today),
+            "last7" => (today.AddDays(-6), today),
+            "last30" => (today.AddDays(-29), today),
+            _ => (today.AddDays(-1), today)
+        };
+
+        filterStartDate = StartDate ?? filterStartDate;
+        filterEndDate = EndDate ?? filterEndDate;
+
+        if (filterStartDate > filterEndDate)
+        {
+            (filterStartDate, filterEndDate) = (filterEndDate, filterStartDate);
+        }
+    }
+
+    private string BuildPresetHref(string range)
+    {
+        return $"/transactions?accountId={selectedAccountId}&range={Uri.EscapeDataString(range)}";
+    }
+
+    private string BuildDetailHref(long transactionId)
+    {
+        return $"/transactions?accountId={selectedAccountId}&startDate={filterStartDate:yyyy-MM-dd}&endDate={filterEndDate:yyyy-MM-dd}&detail={transactionId}";
+    }
+
+    private string BuildCloseHref()
+    {
+        return $"/transactions?accountId={selectedAccountId}&startDate={filterStartDate:yyyy-MM-dd}&endDate={filterEndDate:yyyy-MM-dd}";
+    }
+
+    private static string DisplayAccountType(string accountType)
+    {
+        return accountType == "CHECKING" ? "Харилцах" : accountType;
     }
 
     private static string DisplayDirection(string direction)
@@ -151,9 +285,9 @@ else
     {
         get
         {
-            var today = MongoliaClock.Today;
-            return Enumerable.Range(0, 14)
-                .Select(offset => today.AddDays(offset - 13))
+            var days = Math.Min(31, Math.Max(1, filterEndDate.DayNumber - filterStartDate.DayNumber + 1));
+            return Enumerable.Range(0, days)
+                .Select(offset => filterStartDate.AddDays(offset))
                 .Select(day => new ChartDataPoint
                 {
                     Label = day.ToString("MM-dd"),

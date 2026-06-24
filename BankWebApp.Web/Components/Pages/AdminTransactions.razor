@@ -112,10 +112,10 @@ else if (!isLoading)
     private bool isLoading = true;
 
     [SupplyParameterFromQuery]
-    private string? Search { get; set; }
+    public string? Search { get; set; }
 
     [SupplyParameterFromQuery]
-    private int Page { get; set; } = 1;
+    public int Page { get; set; } = 1;
 
     protected override async Task OnInitializedAsync()
     {

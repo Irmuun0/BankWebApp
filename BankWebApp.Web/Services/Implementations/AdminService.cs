@@ -1,7 +1,9 @@
 using System.Text.Json;
+using BankWebApp.Web.Components.Charts;
 using BankWebApp.Web.Data;
 using BankWebApp.Web.Data.Entities;
 using BankWebApp.Web.DTOs.Admin;
+using BankWebApp.Web.DTOs.Ai;
 using BankWebApp.Web.Helpers;
 using BankWebApp.Web.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -10,13 +12,29 @@ namespace BankWebApp.Web.Services.Implementations;
 
 public class AdminService : IAdminService
 {
+    private static readonly string[] ChartColors =
+    [
+        "#dc2626",
+        "#f59e0b",
+        "#2563eb",
+        "#16a34a",
+        "#7c3aed",
+        "#0891b2",
+        "#64748b"
+    ];
+
     private readonly BankDbContext _dbContext;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IGeminiAnalysisService _geminiAnalysisService;
 
-    public AdminService(BankDbContext dbContext, IHttpContextAccessor httpContextAccessor)
+    public AdminService(
+        BankDbContext dbContext,
+        IHttpContextAccessor httpContextAccessor,
+        IGeminiAnalysisService geminiAnalysisService)
     {
         _dbContext = dbContext;
         _httpContextAccessor = httpContextAccessor;
+        _geminiAnalysisService = geminiAnalysisService;
     }
 
     public async Task<AdminDashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default)
@@ -221,6 +239,286 @@ public class AdminService : IAdminService
         };
     }
 
+    public async Task<AdminAiDetectionPageDto> GetAiDetectionPageAsync(
+        string? search = null,
+        string? username = null,
+        string? currency = null,
+        decimal? minRiskScore = null,
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        long? chatTransactionId = null,
+        int page = 1,
+        int pageSize = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedPageSize = pageSize is 100 ? 100 : 50;
+        var query = BuildAiDetectionTransactionQuery(search, username, currency, minRiskScore, startDate, endDate);
+        var totalItems = await query.CountAsync(cancellationToken);
+        var pageInfo = NormalizePage(page, normalizedPageSize, totalItems);
+        var items = await query
+            .OrderByDescending(transaction => transaction.CreatedAt)
+            .ThenByDescending(transaction => transaction.Id)
+            .Skip((pageInfo.Page - 1) * pageInfo.PageSize)
+            .Take(pageInfo.PageSize)
+            .Select(transaction => new AdminAiDetectionTransactionDto
+            {
+                Id = transaction.Id,
+                CreatedAt = transaction.CreatedAt,
+                FromAccountNumber = transaction.FromAccount.AccountNumber,
+                FromUserName = ((transaction.FromAccount.User.FirstName ?? "") + " " + (transaction.FromAccount.User.LastName ?? "")).Trim(),
+                ToAccountNumber = transaction.ToAccount.AccountNumber,
+                ToUserName = ((transaction.ToAccount.User.FirstName ?? "") + " " + (transaction.ToAccount.User.LastName ?? "")).Trim(),
+                Amount = transaction.Amount,
+                SourceCurrency = transaction.SourceCurrency,
+                CreditedAmount = transaction.CreditedAmount,
+                TargetCurrency = transaction.TargetCurrency,
+                Status = transaction.Status,
+                Description = transaction.Description,
+                IsSuspicious = transaction.IsSuspicious,
+                RuleRiskScore = transaction.TransactionDetectionLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => log.RiskScore)
+                    .FirstOrDefault(),
+                RuleReason = transaction.TransactionDetectionLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => log.Reason)
+                    .FirstOrDefault(),
+                RuleCheckedAt = transaction.TransactionDetectionLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => (DateTime?)log.CreatedAt)
+                    .FirstOrDefault(),
+                LatestAiIsSuspicious = transaction.AiTransactionAnalysisLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => log.IsSuspicious)
+                    .FirstOrDefault(),
+                LatestAiRiskScore = transaction.AiTransactionAnalysisLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => log.RiskScore)
+                    .FirstOrDefault(),
+                LatestAiExplanation = transaction.AiTransactionAnalysisLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => log.Explanation)
+                    .FirstOrDefault(),
+                LatestAiAnalyzedAt = transaction.AiTransactionAnalysisLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => (DateTime?)log.CreatedAt)
+                    .FirstOrDefault()
+            })
+            .ToListAsync(cancellationToken);
+
+        var pageModel = new AdminAiDetectionPageDto
+        {
+            Transactions = new AdminPagedResultDto<AdminAiDetectionTransactionDto>
+            {
+                Items = items,
+                Page = pageInfo.Page,
+                PageSize = pageInfo.PageSize,
+                TotalItems = totalItems
+            }
+        };
+
+        if (chatTransactionId is not null)
+        {
+            pageModel.ChatTransaction = items.FirstOrDefault(item => item.Id == chatTransactionId.Value)
+                ?? await BuildAiDetectionTransactionQuery(null, null, null, null, null, null)
+                    .Where(transaction => transaction.Id == chatTransactionId.Value)
+                    .Select(transaction => new AdminAiDetectionTransactionDto
+                    {
+                        Id = transaction.Id,
+                        CreatedAt = transaction.CreatedAt,
+                        FromAccountNumber = transaction.FromAccount.AccountNumber,
+                        FromUserName = ((transaction.FromAccount.User.FirstName ?? "") + " " + (transaction.FromAccount.User.LastName ?? "")).Trim(),
+                        ToAccountNumber = transaction.ToAccount.AccountNumber,
+                        ToUserName = ((transaction.ToAccount.User.FirstName ?? "") + " " + (transaction.ToAccount.User.LastName ?? "")).Trim(),
+                        Amount = transaction.Amount,
+                        SourceCurrency = transaction.SourceCurrency,
+                        CreditedAmount = transaction.CreditedAmount,
+                        TargetCurrency = transaction.TargetCurrency,
+                        Status = transaction.Status,
+                        Description = transaction.Description,
+                        IsSuspicious = transaction.IsSuspicious,
+                        RuleRiskScore = transaction.TransactionDetectionLogs.OrderByDescending(log => log.CreatedAt).Select(log => log.RiskScore).FirstOrDefault(),
+                        RuleReason = transaction.TransactionDetectionLogs.OrderByDescending(log => log.CreatedAt).Select(log => log.Reason).FirstOrDefault(),
+                        LatestAiExplanation = transaction.AiTransactionAnalysisLogs.OrderByDescending(log => log.CreatedAt).Select(log => log.Explanation).FirstOrDefault(),
+                        LatestAiAnalyzedAt = transaction.AiTransactionAnalysisLogs.OrderByDescending(log => log.CreatedAt).Select(log => (DateTime?)log.CreatedAt).FirstOrDefault()
+                    })
+                    .FirstOrDefaultAsync(cancellationToken);
+
+            pageModel.ChatMessages = await _dbContext.ChatLogs
+                .AsNoTracking()
+                .Where(log => log.RelatedTransactionId == chatTransactionId.Value && log.IntentType == "ADMIN_REVIEW_HELP")
+                .OrderByDescending(log => log.CreatedAt)
+                .Take(10)
+                .OrderBy(log => log.CreatedAt)
+                .Select(log => new AdminAiDetectionChatMessageDto
+                {
+                    Question = log.UserMessage,
+                    Answer = log.BotResponse,
+                    CreatedAt = log.CreatedAt
+                })
+                .ToListAsync(cancellationToken);
+        }
+
+        foreach (var item in pageModel.Transactions.Items.Where(item => string.IsNullOrWhiteSpace(item.FromUserName)))
+        {
+            item.FromUserName = "-";
+        }
+
+        foreach (var item in pageModel.Transactions.Items.Where(item => string.IsNullOrWhiteSpace(item.ToUserName)))
+        {
+            item.ToUserName = "-";
+        }
+
+        return pageModel;
+    }
+
+    public async Task<(bool Success, string? ErrorMessage, int AnalyzedCount)> AnalyzeTransactionsWithAiAsync(
+        long adminUserId,
+        IReadOnlyList<long> transactionIds,
+        string? modelName = null,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = transactionIds.Where(id => id > 0).Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return (false, "AI шинжилгээ хийх гүйлгээ сонгоно уу.", 0);
+        }
+
+        if (ids.Count > 1)
+        {
+            return (false, "AI Detection-ийг нэг удаад зөвхөн нэг гүйлгээнд ажиллуулна.", 0);
+        }
+
+        var analyzedCount = 0;
+        var errors = new List<string>();
+
+        foreach (var transactionId in ids)
+        {
+            var context = await BuildGeminiAnalysisContextAsync(transactionId, cancellationToken);
+            if (context is null)
+            {
+                errors.Add($"#{transactionId}: гүйлгээ олдсонгүй.");
+                continue;
+            }
+
+            var result = await _geminiAnalysisService.AnalyzeTransactionAsync(context, modelName, cancellationToken);
+            if (!result.Success || result.Result is null)
+            {
+                errors.Add($"#{transactionId}: {result.ErrorMessage ?? "AI шинжилгээ амжилтгүй."}");
+                continue;
+            }
+
+            _dbContext.AiTransactionAnalysisLogs.Add(new AiTransactionAnalysisLog
+            {
+                TransactionId = transactionId,
+                AnalyzedBy = adminUserId,
+                ModelName = result.Result.ModelName,
+                IsSuspicious = result.Result.IsSuspicious,
+                RiskScore = result.Result.RiskScore,
+                Explanation = result.Result.Explanation,
+                RecommendedAction = result.Result.RecommendedAction,
+                SourceContextJson = JsonSerializer.Serialize(context),
+                CreatedAt = MongoliaClock.Now
+            });
+
+            AddAuditLog(
+                adminUserId,
+                "AI_TRANSACTION_ANALYSIS",
+                "transactions",
+                transactionId,
+                new { },
+                new
+                {
+                    result.Result.IsSuspicious,
+                    result.Result.RiskScore,
+                    result.Result.ModelName
+                },
+                "Admin generated Gemini analysis for transaction.");
+
+            analyzedCount++;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        if (analyzedCount == 0)
+        {
+            return (false, string.Join(" ", errors.Take(3)), analyzedCount);
+        }
+
+        var message = errors.Count == 0
+            ? $"{analyzedCount} гүйлгээнд AI шинжилгээ хийлээ."
+            : $"{analyzedCount} гүйлгээнд AI шинжилгээ хийлээ. Зарим гүйлгээ амжилтгүй: {string.Join(" ", errors.Take(3))}";
+
+        return (true, message, analyzedCount);
+    }
+
+    public async Task<(bool Success, string? ErrorMessage)> AskAiDetectionQuestionAsync(
+        long adminUserId,
+        long transactionId,
+        string question,
+        string? modelName = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(question))
+        {
+            return (false, "Асуулт хоосон байна.");
+        }
+
+        var context = await BuildGeminiAnalysisContextAsync(transactionId, cancellationToken);
+        if (context is null)
+        {
+            return (false, "Гүйлгээ олдсонгүй.");
+        }
+
+        var latestAnalysis = await _dbContext.AiTransactionAnalysisLogs
+            .AsNoTracking()
+            .Where(log => log.TransactionId == transactionId)
+            .OrderByDescending(log => log.CreatedAt)
+            .Select(log => log.Explanation)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(latestAnalysis))
+        {
+            return (false, "Эхлээд энэ гүйлгээнд AI Detection ажиллуулна уу.");
+        }
+
+        var result = await _geminiAnalysisService.AskTransactionAnalysisQuestionAsync(
+            context,
+            latestAnalysis,
+            question,
+            modelName,
+            cancellationToken);
+
+        if (!result.Success || string.IsNullOrWhiteSpace(result.Answer))
+        {
+            return (false, result.ErrorMessage ?? "AI chat хариу авч чадсангүй.");
+        }
+
+        _dbContext.ChatLogs.Add(new ChatLog
+        {
+            UserId = adminUserId,
+            SessionId = Guid.NewGuid(),
+            IntentType = "ADMIN_REVIEW_HELP",
+            UserMessage = question.Trim(),
+            BotResponse = result.Answer,
+            UsedContextType = "TRANSACTION_AI_ANALYSIS",
+            RelatedTransactionId = transactionId,
+            CreatedAt = MongoliaClock.Now
+        });
+
+        AddAuditLog(
+            adminUserId,
+            "AI_TRANSACTION_CHAT",
+            "transactions",
+            transactionId,
+            new { },
+            new { Question = question.Trim() },
+            "Admin asked Gemini follow-up question about transaction.");
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return (true, "AI chat хариу бэлэн боллоо.");
+    }
+
     public async Task<AdminPagedResultDto<AdminAuditLogDto>> GetAuditLogsAsync(
         string? source = null,
         string? search = null,
@@ -404,6 +702,155 @@ public class AdminService : IAdminService
         };
     }
 
+    public async Task<AdminSuspiciousDetectionReportDto> GetSuspiciousDetectionReportAsync(
+        DateOnly? startDate = null,
+        DateOnly? endDate = null,
+        string? search = null,
+        string? reviewStatus = null,
+        bool suspiciousOnly = false,
+        int page = 1,
+        int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var today = MongoliaClock.Today;
+        var effectiveStartDate = startDate ?? today.AddDays(-6);
+        var effectiveEndDate = endDate ?? today;
+
+        if (effectiveEndDate < effectiveStartDate)
+        {
+            (effectiveStartDate, effectiveEndDate) = (effectiveEndDate, effectiveStartDate);
+        }
+
+        var start = effectiveStartDate.ToDateTime(TimeOnly.MinValue);
+        var endExclusive = effectiveEndDate.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        var normalizedSearch = NormalizeSearch(search);
+        var normalizedReviewStatus = NormalizeSearch(reviewStatus)?.ToUpperInvariant();
+
+        var query = BuildSuspiciousDetectionReportQuery(start, endExclusive, normalizedSearch, normalizedReviewStatus, suspiciousOnly);
+        var totalItems = await query.CountAsync(cancellationToken);
+        var pageInfo = NormalizePage(page, pageSize, totalItems);
+
+        var allFilteredRows = await query
+            .OrderBy(log => log.CreatedAt)
+            .ThenBy(log => log.Id)
+            .Select(log => new
+            {
+                log.Id,
+                log.TransactionId,
+                log.CreatedAt,
+                log.ServiceStatus,
+                log.IsSuspicious,
+                log.RiskScore,
+                log.Reason,
+                log.TriggeredRules,
+                log.Source,
+                TransactionCreatedAt = log.Transaction.CreatedAt,
+                log.Transaction.Amount,
+                log.Transaction.SourceCurrency,
+                log.Transaction.CreditedAmount,
+                log.Transaction.TargetCurrency,
+                FromAccountNumber = log.Transaction.FromAccount.AccountNumber,
+                ToAccountNumber = log.Transaction.ToAccount.AccountNumber,
+                ReviewStatus = log.Transaction.SuspiciousTransactionDetail == null
+                    ? null
+                    : log.Transaction.SuspiciousTransactionDetail.ReviewStatus
+            })
+            .ToListAsync(cancellationToken);
+
+        var pagedRows = allFilteredRows
+            .OrderByDescending(log => log.CreatedAt)
+            .ThenByDescending(log => log.Id)
+            .Skip((pageInfo.Page - 1) * pageInfo.PageSize)
+            .Take(pageInfo.PageSize)
+            .Select(log => new AdminSuspiciousDetectionLogDto
+            {
+                Id = log.Id,
+                TransactionId = log.TransactionId,
+                DetectionAt = log.CreatedAt,
+                TransactionAt = log.TransactionCreatedAt,
+                ServiceStatus = log.ServiceStatus,
+                IsSuspicious = log.IsSuspicious,
+                RiskScore = log.RiskScore,
+                Reason = log.Reason ?? "-",
+                TriggeredRules = ParseTriggeredRules(log.TriggeredRules),
+                TriggeredRulesText = string.Join(", ", ParseTriggeredRules(log.TriggeredRules)),
+                ReviewStatus = log.ReviewStatus ?? "-",
+                ReviewStatusLabel = log.ReviewStatus is null ? "-" : ReviewStatusHelper.GetLabel(log.ReviewStatus),
+                FromAccountNumber = log.FromAccountNumber,
+                ToAccountNumber = log.ToAccountNumber,
+                Amount = log.Amount,
+                SourceCurrency = log.SourceCurrency,
+                CreditedAmount = log.CreditedAmount,
+                TargetCurrency = log.TargetCurrency,
+                Source = log.Source
+            })
+            .ToList();
+
+        var suspiciousRows = allFilteredRows.Where(log => log.IsSuspicious == true).ToList();
+        var checkedRows = allFilteredRows.Where(log => string.Equals(log.ServiceStatus, "CHECKED", StringComparison.OrdinalIgnoreCase)).ToList();
+        var ruleSummaries = allFilteredRows
+            .SelectMany(log => ParseTriggeredRules(log.TriggeredRules).Select(rule => new { Rule = rule, log.RiskScore }))
+            .GroupBy(item => item.Rule)
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key)
+            .Select(group => new AdminSuspiciousDetectionRuleSummaryDto
+            {
+                RuleCode = group.Key,
+                HitCount = group.Count(),
+                AverageRiskScore = decimal.Round(group.Average(item => item.RiskScore ?? 0m), 2, MidpointRounding.AwayFromZero)
+            })
+            .Take(10)
+            .ToList();
+
+        var dailySuspicious = Enumerable.Range(0, (effectiveEndDate.DayNumber - effectiveStartDate.DayNumber) + 1)
+            .Select(offset => effectiveStartDate.AddDays(offset))
+            .Select(day => new ChartDataPoint
+            {
+                Label = day.ToString("MM-dd"),
+                Value = allFilteredRows.Count(log => log.IsSuspicious == true && DateOnly.FromDateTime(log.CreatedAt) == day),
+                Color = "#dc2626"
+            })
+            .ToList();
+
+        var reviewStatusChart = suspiciousRows
+            .GroupBy(log => log.ReviewStatus ?? "NO_REVIEW")
+            .OrderByDescending(group => group.Count())
+            .Select((group, index) => new ChartDataPoint
+            {
+                Label = group.Key == "NO_REVIEW" ? "Review үүсээгүй" : ReviewStatusHelper.GetLabel(group.Key),
+                Value = group.Count(),
+                Color = ChartColors[index % ChartColors.Length]
+            })
+            .ToList();
+
+        return new AdminSuspiciousDetectionReportDto
+        {
+            Summary = new AdminSuspiciousDetectionSummaryDto
+            {
+                StartDate = effectiveStartDate,
+                EndDate = effectiveEndDate,
+                TotalChecks = allFilteredRows.Count,
+                SuspiciousCount = suspiciousRows.Count,
+                NormalCount = allFilteredRows.Count(log => log.IsSuspicious == false),
+                UnavailableCount = allFilteredRows.Count(log => !string.Equals(log.ServiceStatus, "CHECKED", StringComparison.OrdinalIgnoreCase)),
+                PendingReviewCount = suspiciousRows.Count(log => string.Equals(log.ReviewStatus, "PENDING", StringComparison.OrdinalIgnoreCase)),
+                ReviewedCount = suspiciousRows.Count(log => log.ReviewStatus is not null && !string.Equals(log.ReviewStatus, "PENDING", StringComparison.OrdinalIgnoreCase)),
+                AverageRiskScore = checkedRows.Count == 0 ? 0m : decimal.Round(checkedRows.Average(log => log.RiskScore ?? 0m), 2, MidpointRounding.AwayFromZero),
+                MaxRiskScore = checkedRows.Count == 0 ? 0m : checkedRows.Max(log => log.RiskScore ?? 0m)
+            },
+            RuleSummaries = ruleSummaries,
+            DailySuspiciousTrend = dailySuspicious,
+            ReviewStatusChart = reviewStatusChart,
+            Logs = new AdminPagedResultDto<AdminSuspiciousDetectionLogDto>
+            {
+                Items = pagedRows,
+                Page = pageInfo.Page,
+                PageSize = pageInfo.PageSize,
+                TotalItems = totalItems
+            }
+        };
+    }
+
     public async Task<List<AdminCurrencyRateSettingDto>> GetCurrencyRateSettingsAsync(CancellationToken cancellationToken = default)
     {
         var now = MongoliaClock.Now;
@@ -451,6 +898,146 @@ public class AdminService : IAdminService
         }
 
         return settings.Select(setting => MapCurrencyRateSetting(setting, now)).ToList();
+    }
+
+    public async Task<AdminFraudRuleSettingsPageDto> GetFraudRuleSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        var detectionSetting = await _dbContext.FraudDetectionSettings
+            .AsNoTracking()
+            .Include(setting => setting.UpdatedByNavigation)
+            .FirstOrDefaultAsync(setting => setting.Id == 1, cancellationToken);
+
+        var rules = await _dbContext.FraudRuleSettings
+            .AsNoTracking()
+            .Include(setting => setting.UpdatedByNavigation)
+            .OrderBy(setting => setting.RuleCode)
+            .Select(setting => new AdminFraudRuleSettingDto
+            {
+                Id = setting.Id,
+                RuleCode = setting.RuleCode,
+                DisplayName = setting.DisplayName,
+                Description = setting.Description,
+                IsEnabled = setting.IsEnabled,
+                Score = setting.Score,
+                NumericThreshold = setting.NumericThreshold,
+                AmountThresholdMnt = setting.AmountThresholdMnt,
+                AmountThresholdUsd = setting.AmountThresholdUsd,
+                UpdatedAt = setting.UpdatedAt,
+                UpdatedByUsername = setting.UpdatedByNavigation == null ? null : setting.UpdatedByNavigation.Username
+            })
+            .ToListAsync(cancellationToken);
+
+        return new AdminFraudRuleSettingsPageDto
+        {
+            SuspiciousThreshold = detectionSetting?.SuspiciousThreshold ?? 60,
+            ThresholdUpdatedAt = detectionSetting?.UpdatedAt,
+            ThresholdUpdatedByUsername = detectionSetting?.UpdatedByNavigation?.Username,
+            Rules = rules
+        };
+    }
+
+    public async Task<(bool Success, string? ErrorMessage)> UpdateFraudRuleSettingAsync(
+        long adminUserId,
+        UpdateFraudRuleSettingDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var setting = await _dbContext.FraudRuleSettings
+            .FirstOrDefaultAsync(setting => setting.Id == dto.Id, cancellationToken);
+
+        if (setting is null)
+        {
+            return (false, "Rule тохиргоо олдсонгүй.");
+        }
+
+        if (dto.Score is < 0 or > 100)
+        {
+            return (false, "Rule score 0-100 хооронд байх ёстой.");
+        }
+
+        if (dto.NumericThreshold is < 0 ||
+            dto.AmountThresholdMnt is < 0 ||
+            dto.AmountThresholdUsd is < 0)
+        {
+            return (false, "Threshold утга сөрөг байж болохгүй.");
+        }
+
+        var oldValue = new
+        {
+            setting.IsEnabled,
+            setting.Score,
+            setting.NumericThreshold,
+            setting.AmountThresholdMnt,
+            setting.AmountThresholdUsd
+        };
+
+        setting.IsEnabled = dto.IsEnabled;
+        setting.Score = dto.Score;
+        setting.NumericThreshold = dto.NumericThreshold;
+        setting.AmountThresholdMnt = dto.AmountThresholdMnt;
+        setting.AmountThresholdUsd = dto.AmountThresholdUsd;
+        setting.UpdatedBy = adminUserId;
+        setting.UpdatedAt = MongoliaClock.Now;
+
+        AddAuditLog(
+            adminUserId,
+            "FRAUD_RULE_SETTING_UPDATED",
+            "fraud_rule_settings",
+            setting.Id,
+            oldValue,
+            new
+            {
+                setting.IsEnabled,
+                setting.Score,
+                setting.NumericThreshold,
+                setting.AmountThresholdMnt,
+                setting.AmountThresholdUsd
+            },
+            $"{setting.RuleCode} rule тохиргоо шинэчлэгдлээ.");
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return (true, "Rule тохиргоо шинэчлэгдлээ.");
+    }
+
+    public async Task<(bool Success, string? ErrorMessage)> UpdateFraudDetectionSettingsAsync(
+        long adminUserId,
+        UpdateFraudDetectionSettingsDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        if (dto.SuspiciousThreshold is < 1 or > 100)
+        {
+            return (false, "Сэжигтэй гэж үзэх босго 1-100 хооронд байх ёстой.");
+        }
+
+        var setting = await _dbContext.FraudDetectionSettings
+            .FirstOrDefaultAsync(setting => setting.Id == 1, cancellationToken);
+
+        if (setting is null)
+        {
+            setting = new FraudDetectionSetting
+            {
+                Id = 1,
+                SuspiciousThreshold = 60,
+                UpdatedAt = MongoliaClock.Now
+            };
+            _dbContext.FraudDetectionSettings.Add(setting);
+        }
+
+        var oldValue = new { setting.SuspiciousThreshold };
+        setting.SuspiciousThreshold = dto.SuspiciousThreshold;
+        setting.UpdatedBy = adminUserId;
+        setting.UpdatedAt = MongoliaClock.Now;
+
+        AddAuditLog(
+            adminUserId,
+            "FRAUD_DETECTION_SETTING_UPDATED",
+            "fraud_detection_settings",
+            setting.Id,
+            oldValue,
+            new { setting.SuspiciousThreshold },
+            "Rule-based detection global threshold шинэчлэгдлээ.");
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return (true, "Сэжигтэй босго шинэчлэгдлээ.");
     }
 
     public async Task<(bool Success, string? ErrorMessage)> UpdateCurrencyRateAlgorithmAsync(
@@ -773,7 +1360,9 @@ public class AdminService : IAdminService
             },
             $"Transaction #{detail.TransactionId} review updated.");
 
-        var notification = BuildReviewNotification(detail);
+        var notification = dto.SendUserNotification
+            ? BuildReviewNotification(detail, dto.UserNotificationMessage)
+            : null;
         if (notification is not null)
         {
             _dbContext.Notifications.Add(notification);
@@ -841,6 +1430,19 @@ public class AdminService : IAdminService
             oldValue,
             new { account.IsActive },
             $"Account {account.AccountNumber} active status updated.");
+
+        _dbContext.Notifications.Add(new Notification
+        {
+            UserId = account.UserId,
+            TransactionId = null,
+            NotificationType = "ACCOUNT_STATUS_UPDATED",
+            Title = "Дансны төлөв өөрчлөгдлөө",
+            Message = isActive
+                ? $"Таны {account.AccountNumber} дугаартай данс идэвхтэй боллоо."
+                : $"Таны {account.AccountNumber} дугаартай данс идэвхгүй боллоо.",
+            IsRead = false,
+            CreatedAt = account.UpdatedAt
+        });
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return (true, "Дансны төлөв амжилттай шинэчлэгдлээ.");
@@ -1022,6 +1624,66 @@ public class AdminService : IAdminService
         }
 
         return query;
+    }
+
+    private IQueryable<TransactionDetectionLog> BuildSuspiciousDetectionReportQuery(
+        DateTime start,
+        DateTime endExclusive,
+        string? search,
+        string? reviewStatus,
+        bool suspiciousOnly)
+    {
+        var query = _dbContext.TransactionDetectionLogs
+            .AsNoTracking()
+            .AsQueryable();
+
+        query = query.Where(log => log.CreatedAt >= start && log.CreatedAt < endExclusive);
+
+        if (suspiciousOnly)
+        {
+            query = query.Where(log => log.IsSuspicious == true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(reviewStatus))
+        {
+            query = query.Where(log =>
+                log.Transaction.SuspiciousTransactionDetail != null &&
+                log.Transaction.SuspiciousTransactionDetail.ReviewStatus == reviewStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query = query.Where(log =>
+                log.TransactionId.ToString().Contains(search) ||
+                log.ServiceStatus.Contains(search) ||
+                log.Source.Contains(search) ||
+                (log.Reason ?? "").Contains(search) ||
+                (log.TriggeredRules ?? "").Contains(search) ||
+                log.Transaction.FromAccount.AccountNumber.Contains(search) ||
+                log.Transaction.ToAccount.AccountNumber.Contains(search) ||
+                (log.Transaction.Description ?? "").Contains(search));
+        }
+
+        return query;
+    }
+
+    private static List<string> ParseTriggeredRules(string? triggeredRules)
+    {
+        if (string.IsNullOrWhiteSpace(triggeredRules))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(triggeredRules) ?? [];
+        }
+        catch (JsonException)
+        {
+            return triggeredRules
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+        }
     }
 
     private static AdminAuditLogDto MapAuditLog(AuditLog log)
@@ -1339,6 +2001,134 @@ public class AdminService : IAdminService
             .Include(detail => detail.ReviewedByNavigation);
     }
 
+    private IQueryable<Transaction> BuildAiDetectionTransactionQuery(
+        string? search,
+        string? username,
+        string? currency,
+        decimal? minRiskScore,
+        DateOnly? startDate,
+        DateOnly? endDate)
+    {
+        IQueryable<Transaction> query = _dbContext.Transactions
+            .AsNoTracking()
+            .Include(transaction => transaction.FromAccount)
+                .ThenInclude(account => account.User)
+            .Include(transaction => transaction.ToAccount)
+                .ThenInclude(account => account.User)
+            .Include(transaction => transaction.TransactionDetectionLogs)
+            .Include(transaction => transaction.AiTransactionAnalysisLogs);
+
+        var normalizedSearch = NormalizeSearch(search);
+        if (normalizedSearch is not null)
+        {
+            query = query.Where(transaction =>
+                transaction.FromAccount.AccountNumber.Contains(normalizedSearch) ||
+                transaction.ToAccount.AccountNumber.Contains(normalizedSearch) ||
+                transaction.Status.Contains(normalizedSearch) ||
+                (transaction.Description ?? "").Contains(normalizedSearch));
+        }
+
+        var normalizedUsername = NormalizeSearch(username);
+        if (normalizedUsername is not null)
+        {
+            query = query.Where(transaction =>
+                transaction.FromAccount.User.Username.Contains(normalizedUsername) ||
+                transaction.ToAccount.User.Username.Contains(normalizedUsername) ||
+                (transaction.FromAccount.User.FirstName ?? "").Contains(normalizedUsername) ||
+                (transaction.FromAccount.User.LastName ?? "").Contains(normalizedUsername) ||
+                (transaction.ToAccount.User.FirstName ?? "").Contains(normalizedUsername) ||
+                (transaction.ToAccount.User.LastName ?? "").Contains(normalizedUsername));
+        }
+
+        var normalizedCurrency = currency?.Trim().ToUpperInvariant();
+        if (!string.IsNullOrWhiteSpace(normalizedCurrency))
+        {
+            query = query.Where(transaction =>
+                transaction.SourceCurrency == normalizedCurrency ||
+                transaction.TargetCurrency == normalizedCurrency);
+        }
+
+        if (minRiskScore is not null)
+        {
+            query = query.Where(transaction =>
+                transaction.TransactionDetectionLogs
+                    .OrderByDescending(log => log.CreatedAt)
+                    .Select(log => log.RiskScore ?? -1m)
+                    .FirstOrDefault() >= minRiskScore.Value);
+        }
+
+        var start = startDate?.ToDateTime(TimeOnly.MinValue);
+        if (start is not null)
+        {
+            query = query.Where(transaction => transaction.CreatedAt >= start.Value);
+        }
+
+        var endExclusive = endDate?.AddDays(1).ToDateTime(TimeOnly.MinValue);
+        if (endExclusive is not null)
+        {
+            query = query.Where(transaction => transaction.CreatedAt < endExclusive.Value);
+        }
+
+        return query;
+    }
+
+    private async Task<GeminiSuspiciousAnalysisContextDto?> BuildGeminiAnalysisContextAsync(
+        long transactionId,
+        CancellationToken cancellationToken)
+    {
+        var transaction = await _dbContext.Transactions
+            .AsNoTracking()
+            .Include(item => item.FromAccount)
+            .Include(item => item.ToAccount)
+            .Include(item => item.TransactionDetectionLogs)
+            .Include(item => item.SuspiciousTransactionDetail)
+            .FirstOrDefaultAsync(item => item.Id == transactionId, cancellationToken);
+
+        if (transaction is null)
+        {
+            return null;
+        }
+
+        var latestDetection = transaction.TransactionDetectionLogs
+            .OrderByDescending(log => log.CreatedAt)
+            .FirstOrDefault();
+
+        return new GeminiSuspiciousAnalysisContextDto
+        {
+            TransactionId = transaction.Id,
+            CreatedAt = transaction.CreatedAt,
+            Amount = transaction.Amount,
+            SourceCurrency = transaction.SourceCurrency,
+            CreditedAmount = transaction.CreditedAmount,
+            TargetCurrency = transaction.TargetCurrency,
+            RiskScore = latestDetection?.RiskScore ?? 0m,
+            SuspiciousReason = latestDetection?.Reason ?? "Rule-based detection бүртгэл байхгүй.",
+            ReviewStatus = transaction.SuspiciousTransactionDetail?.ReviewStatus ?? "NOT_REVIEWED",
+            FromAccountMasked = MaskAccountNumber(transaction.FromAccount.AccountNumber),
+            ToAccountMasked = MaskAccountNumber(transaction.ToAccount.AccountNumber),
+            Description = transaction.Description,
+            IsCrossCurrency = !string.Equals(transaction.SourceCurrency, transaction.TargetCurrency, StringComparison.OrdinalIgnoreCase),
+            ExchangeRateValue = transaction.ExchangeRateValue,
+            DetectionCheckedAt = transaction.DetectionCheckedAt
+        };
+    }
+
+    private static string MaskAccountNumber(string accountNumber)
+    {
+        if (string.IsNullOrWhiteSpace(accountNumber))
+        {
+            return "-";
+        }
+
+        var trimmed = accountNumber.Trim();
+        if (trimmed.Length <= 4)
+        {
+            return new string('*', trimmed.Length);
+        }
+
+        return $"{trimmed[..2]}{new string('*', Math.Max(2, trimmed.Length - 4))}{trimmed[^2..]}";
+    }
+
     private static AdminSuspiciousTransactionDto MapSuspiciousDetail(SuspiciousTransactionDetail detail)
     {
         return new AdminSuspiciousTransactionDto
@@ -1412,17 +2202,22 @@ public class AdminService : IAdminService
         return (normalizedPage, normalizedPageSize);
     }
 
-    private static Notification? BuildReviewNotification(SuspiciousTransactionDetail detail)
+    private static Notification? BuildReviewNotification(SuspiciousTransactionDetail detail, string? customMessage)
     {
-        var message = detail.ReviewStatus switch
+        var defaultMessage = detail.ReviewStatus switch
         {
-            "CONFIRMED" => "Таны гүйлгээ аюулгүй байдлын нэмэлт шалгалтаар баталгаажлаа. Шаардлагатай бол банкны ажилтан тантай холбогдоно.",
-            "FALSE_ALARM" => "Таны гүйлгээний нэмэлт шалгалт дууслаа. Асуудал илрээгүй.",
+            "CONFIRMED" => "Таны нэг гүйлгээ аюулгүй байдлын нэмэлт шалгалтаар сэжигтэй гэж баталгаажлаа. Дэлгэрэнгүй мэдээлэл шаардлагатай бол банкны ажилтантай холбогдоно уу.",
+            "REVIEWING" => "Таны нэг гүйлгээ аюулгүй байдлын нэмэлт шалгалтад орсон байна. Шалгалт дуусах хүртэл банкнаас ирэх зааврыг дагана уу.",
             "RESOLVED" => "Таны гүйлгээний нэмэлт шалгалт шийдвэрлэгдлээ.",
+            "FALSE_ALARM" => "Таны гүйлгээний нэмэлт шалгалт дууслаа. Сэжигтэй асуудал илрээгүй.",
             _ => null
         };
 
-        if (message is null)
+        var message = string.IsNullOrWhiteSpace(customMessage)
+            ? defaultMessage
+            : customMessage.Trim();
+
+        if (string.IsNullOrWhiteSpace(message))
         {
             return null;
         }
@@ -1431,14 +2226,13 @@ public class AdminService : IAdminService
         {
             UserId = detail.Transaction.FromAccount.UserId,
             TransactionId = detail.TransactionId,
-            NotificationType = "SECURITY_REVIEW_UPDATE",
-            Title = "Гүйлгээний шалгалтын мэдээлэл",
+            NotificationType = detail.ReviewStatus == "CONFIRMED" ? "SECURITY_REVIEW" : "SECURITY_REVIEW_UPDATE",
+            Title = detail.ReviewStatus == "CONFIRMED" ? "Гүйлгээний анхааруулга" : "Гүйлгээний шалгалтын мэдээлэл",
             Message = message,
             IsRead = false,
             CreatedAt = MongoliaClock.Now
         };
     }
-
     private static string? BuildFullName(string? firstName, string? lastName)
     {
         var fullName = $"{firstName} {lastName}".Trim();

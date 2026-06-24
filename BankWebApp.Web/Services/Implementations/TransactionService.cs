@@ -30,14 +30,47 @@ public class TransactionService : ITransactionService
 
     public async Task<List<UserTransactionDto>> GetMyTransactionsAsync(long currentUserId, CancellationToken cancellationToken = default)
     {
-        return await BuildMyTransactionsQuery(currentUserId)
+        return await BuildMyTransactionsQuery(currentUserId, null)
             .Take(100)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<UserTransactionDto>> GetMyTransactionsAsync(
+        long currentUserId,
+        long accountId,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        CancellationToken cancellationToken = default)
+    {
+        var query = BuildMyTransactionsQuery(currentUserId, accountId);
+
+        if (startDate is not null)
+        {
+            var start = startDate.Value.ToDateTime(TimeOnly.MinValue);
+            query = query.Where(transaction => transaction.CreatedAt >= start);
+        }
+
+        if (endDate is not null)
+        {
+            var endExclusive = endDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            query = query.Where(transaction => transaction.CreatedAt < endExclusive);
+        }
+
+        return await query
+            .Take(500)
             .ToListAsync(cancellationToken);
     }
 
     public async Task<List<UserTransactionDto>> GetRecentMyTransactionsAsync(long currentUserId, int count = 5, CancellationToken cancellationToken = default)
     {
-        return await BuildMyTransactionsQuery(currentUserId)
+        return await BuildMyTransactionsQuery(currentUserId, null)
+            .Take(Math.Clamp(count, 1, 20))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<UserTransactionDto>> GetRecentMyTransactionsAsync(long currentUserId, long accountId, int count = 5, CancellationToken cancellationToken = default)
+    {
+        return await BuildMyTransactionsQuery(currentUserId, accountId)
             .Take(Math.Clamp(count, 1, 20))
             .ToListAsync(cancellationToken);
     }
@@ -165,6 +198,21 @@ public class TransactionService : ITransactionService
                 await _dbContext.SaveChangesAsync(cancellationToken);
             }
 
+            if (toAccount.UserId != currentUserId)
+            {
+                _dbContext.Notifications.Add(new Notification
+                {
+                    UserId = toAccount.UserId,
+                    TransactionId = transaction.Id,
+                    NotificationType = "TRANSACTION_SUCCESS",
+                    Title = "Мөнгө орж ирлээ",
+                    Message = $"{transaction.CreditedAmount:N2} {transaction.TargetCurrency} таны {toAccount.AccountNumber} дансанд орлоо.",
+                    IsRead = false,
+                    CreatedAt = now
+                });
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+
             await dbTransaction.CommitAsync(cancellationToken);
 
             await ProcessSuspiciousDetectionAsync(currentUserId, transaction.Id, cancellationToken);
@@ -198,71 +246,62 @@ public class TransactionService : ITransactionService
                 return;
             }
 
-            await using var detectionTransaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-
-            var transaction = await _dbContext.Transactions
-                .Include(item => item.FromAccount)
-                .FirstOrDefaultAsync(item => item.Id == transactionId, cancellationToken);
-
-            if (transaction is null)
-            {
-                await detectionTransaction.RollbackAsync(cancellationToken);
-                return;
-            }
-
             var now = MongoliaClock.Now;
-            transaction.DetectionCheckedAt = now;
 
-            _dbContext.TransactionDetectionLogs.Add(new TransactionDetectionLog
+            await using (var detectionTransaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken))
             {
-                TransactionId = transactionId,
-                ServiceStatus = "CHECKED",
-                IsSuspicious = result.IsSuspicious,
-                RiskScore = Math.Clamp(result.RiskScore, 0m, 100m),
-                Reason = result.Reason,
-                TriggeredRules = JsonSerializer.Serialize(result.TriggeredRules),
-                Source = "FASTAPI_RULES",
-                CreatedAt = now
-            });
+                var transaction = await _dbContext.Transactions
+                    .Include(item => item.FromAccount)
+                    .FirstOrDefaultAsync(item => item.Id == transactionId, cancellationToken);
 
-            if (result.IsSuspicious)
-            {
-                transaction.IsSuspicious = true;
-
-                var detailExists = await _dbContext.SuspiciousTransactionDetails
-                    .AnyAsync(detail => detail.TransactionId == transactionId, cancellationToken);
-
-                if (!detailExists)
+                if (transaction is null)
                 {
-                    _dbContext.SuspiciousTransactionDetails.Add(new SuspiciousTransactionDetail
-                    {
-                        TransactionId = transactionId,
-                        RiskScore = Math.Clamp(result.RiskScore, 0m, 100m),
-                        SuspiciousReason = BuildSuspiciousReason(result),
-                        AiExplanation = null,
-                        ReviewStatus = "PENDING",
-                        ReviewNote = null,
-                        ReviewedBy = null,
-                        ReviewedAt = null,
-                        CreatedAt = now,
-                        UpdatedAt = now
-                    });
+                    await detectionTransaction.RollbackAsync(cancellationToken);
+                    return;
                 }
 
-                _dbContext.Notifications.Add(new Notification
+                transaction.DetectionCheckedAt = now;
+
+                _dbContext.TransactionDetectionLogs.Add(new TransactionDetectionLog
                 {
-                    UserId = transaction.FromAccount.UserId,
-                    TransactionId = transaction.Id,
-                    NotificationType = "SECURITY_REVIEW",
-                    Title = "Гүйлгээний анхааруулга",
-                    Message = "Таны гүйлгээг систем нэмэлт шалгалтад бүртгэлээ. Дэлгэрэнгүй мэдээлэл шаардлагатай бол банкны ажилтантай холбогдоно уу.",
-                    IsRead = false,
+                    TransactionId = transactionId,
+                    ServiceStatus = "CHECKED",
+                    IsSuspicious = result.IsSuspicious,
+                    RiskScore = Math.Clamp(result.RiskScore, 0m, 100m),
+                    Reason = result.Reason,
+                    TriggeredRules = JsonSerializer.Serialize(result.TriggeredRules),
+                    Source = "FASTAPI_RULES",
                     CreatedAt = now
                 });
-            }
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
-            await detectionTransaction.CommitAsync(cancellationToken);
+                if (result.IsSuspicious)
+                {
+                    transaction.IsSuspicious = true;
+
+                    var detailExists = await _dbContext.SuspiciousTransactionDetails
+                        .AnyAsync(detail => detail.TransactionId == transactionId, cancellationToken);
+
+                    if (!detailExists)
+                    {
+                        _dbContext.SuspiciousTransactionDetails.Add(new SuspiciousTransactionDetail
+                        {
+                            TransactionId = transactionId,
+                            RiskScore = Math.Clamp(result.RiskScore, 0m, 100m),
+                            SuspiciousReason = BuildSuspiciousReason(result),
+                            AiExplanation = null,
+                            ReviewStatus = "PENDING",
+                            ReviewNote = null,
+                            ReviewedBy = null,
+                            ReviewedAt = null,
+                            CreatedAt = now,
+                            UpdatedAt = now
+                        });
+                    }
+                }
+
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await detectionTransaction.CommitAsync(cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -436,6 +475,8 @@ public class TransactionService : ITransactionService
             ? null
             : Math.Max(0, (transaction.CreatedAt.Date - lastPreviousTransactionAt.Value.Date).Days);
 
+        var detectionSettings = await BuildDetectionSettingsAsync(cancellationToken);
+
         return new SuspiciousDetectionRequestDto
         {
             TransactionId = transaction.Id,
@@ -456,7 +497,41 @@ public class TransactionService : ITransactionService
             DistinctSenderCountToReceiverLast24Hours = distinctSenderCountToReceiverLast24Hours,
             RecentInboundAmountLast30Minutes = decimal.Round(recentInboundAmountLast30Minutes, 2, MidpointRounding.AwayFromZero),
             SenderAccountAgeDays = senderAccountAgeDays,
-            SenderDaysSinceLastTransaction = senderDaysSinceLastTransaction
+            SenderDaysSinceLastTransaction = senderDaysSinceLastTransaction,
+            DetectionSettings = detectionSettings
+        };
+    }
+
+    private async Task<SuspiciousDetectionSettingsDto?> BuildDetectionSettingsAsync(CancellationToken cancellationToken)
+    {
+        var settings = await _dbContext.FraudRuleSettings
+            .AsNoTracking()
+            .OrderBy(setting => setting.RuleCode)
+            .Select(setting => new SuspiciousDetectionRuleSettingDto
+            {
+                RuleCode = setting.RuleCode,
+                IsEnabled = setting.IsEnabled,
+                Score = setting.Score,
+                NumericThreshold = setting.NumericThreshold,
+                AmountThresholdMnt = setting.AmountThresholdMnt,
+                AmountThresholdUsd = setting.AmountThresholdUsd
+            })
+            .ToListAsync(cancellationToken);
+
+        if (settings.Count == 0)
+        {
+            return null;
+        }
+
+        var suspiciousThreshold = await _dbContext.FraudDetectionSettings
+            .AsNoTracking()
+            .Select(setting => setting.SuspiciousThreshold)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new SuspiciousDetectionSettingsDto
+        {
+            SuspiciousThreshold = suspiciousThreshold <= 0 ? 60 : suspiciousThreshold,
+            Rules = settings
         };
     }
 
@@ -525,7 +600,7 @@ public class TransactionService : ITransactionService
             .AsNoTracking()
             .Where(transaction =>
                 transaction.Id == transactionId &&
-                transaction.FromAccount.UserId == currentUserId)
+                (transaction.FromAccount.UserId == currentUserId || transaction.ToAccount.UserId == currentUserId))
             .Select(transaction => new
             {
                 transaction.Id,
@@ -558,13 +633,22 @@ public class TransactionService : ITransactionService
         };
     }
 
-    private IQueryable<UserTransactionDto> BuildMyTransactionsQuery(long currentUserId)
+    private IQueryable<UserTransactionDto> BuildMyTransactionsQuery(long currentUserId, long? accountId)
     {
-        return _dbContext.Transactions
+        var query = _dbContext.Transactions
             .AsNoTracking()
             .Where(transaction =>
                 transaction.FromAccount.UserId == currentUserId ||
-                transaction.ToAccount.UserId == currentUserId)
+                transaction.ToAccount.UserId == currentUserId);
+
+        if (accountId is not null)
+        {
+            query = query.Where(transaction =>
+                transaction.FromAccountId == accountId.Value ||
+                transaction.ToAccountId == accountId.Value);
+        }
+
+        return query
             .OrderByDescending(transaction => transaction.CreatedAt)
             .ThenByDescending(transaction => transaction.Id)
             .Select(transaction => new UserTransactionDto
@@ -578,7 +662,9 @@ public class TransactionService : ITransactionService
                 TargetCurrency = transaction.TargetCurrency,
                 Description = transaction.Description,
                 Status = transaction.Status,
-                Direction = transaction.FromAccount.UserId == currentUserId ? "SENT" : "RECEIVED",
+                Direction = accountId == null
+                    ? (transaction.FromAccount.UserId == currentUserId ? "SENT" : "RECEIVED")
+                    : (transaction.FromAccountId == accountId.Value ? "SENT" : "RECEIVED"),
                 CreatedAt = transaction.CreatedAt
             });
     }

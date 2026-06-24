@@ -21,4 +21,27 @@ public class SuspiciousDetectionRequestDto
     public decimal RecentInboundAmountLast30Minutes { get; set; }
     public int SenderAccountAgeDays { get; set; }
     public int? SenderDaysSinceLastTransaction { get; set; }
+    public SuspiciousDetectionSettingsDto? DetectionSettings { get; set; }
+}
+
+public class SuspiciousDetectionSettingsDto
+{
+    public int SuspiciousThreshold { get; set; } = 60;
+
+    public List<SuspiciousDetectionRuleSettingDto> Rules { get; set; } = [];
+}
+
+public class SuspiciousDetectionRuleSettingDto
+{
+    public string RuleCode { get; set; } = string.Empty;
+
+    public bool IsEnabled { get; set; }
+
+    public int Score { get; set; }
+
+    public decimal? NumericThreshold { get; set; }
+
+    public decimal? AmountThresholdMnt { get; set; }
+
+    public decimal? AmountThresholdUsd { get; set; }
 }

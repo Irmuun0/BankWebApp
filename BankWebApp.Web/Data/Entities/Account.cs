@@ -19,6 +19,8 @@ public partial class Account
 
     public bool IsActive { get; set; }
 
+    public bool IsPrimary { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

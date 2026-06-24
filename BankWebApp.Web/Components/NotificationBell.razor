@@ -1,0 +1,220 @@
+@rendermode InteractiveServer
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject INotificationService NotificationService
+
+@if (userId is not null)
+{
+    <div class="notification-center">
+        <button class="notification-trigger"
+                type="button"
+                aria-label="Мэдэгдэл"
+                aria-expanded="@isOpen"
+                @onclick="ToggleOpen">
+            <svg class="notification-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 16v-5a6 6 0 0 0-12 0v5l-2 2v1h16v-1l-2-2Z" />
+                <path d="M9.75 20.5a2.5 2.5 0 0 0 4.5 0" />
+            </svg>
+            @if (UnreadCount > 0)
+            {
+                <span class="notification-dot" aria-label="Шинэ мэдэгдэл байна"></span>
+            }
+        </button>
+
+        @if (isOpen)
+        {
+            <section class="notification-menu" aria-label="Мэдэгдлийн жагсаалт">
+                <div class="notification-menu-header">
+                    <strong>Мэдэгдэл</strong>
+                    @if (UnreadCount > 0)
+                    {
+                        <span>@UnreadCount шинэ</span>
+                    }
+                </div>
+
+                @if (isLoading)
+                {
+                    <div class="notification-empty">Уншиж байна...</div>
+                }
+                else if (notifications.Count == 0)
+                {
+                    <div class="notification-empty">Мэдэгдэл байхгүй байна.</div>
+                }
+                else
+                {
+                    <div class="notification-list">
+                        @foreach (var notification in notifications)
+                        {
+                            <button class="notification-item @(notification.IsRead ? "read" : "unread")"
+                                    type="button"
+                                    @onclick="() => SelectNotificationAsync(notification)">
+                                <span class="notification-item-top">
+                                    <span class="notification-type-badge @GetNotificationTypeClass(notification.NotificationType)">
+                                        <span aria-hidden="true">@GetNotificationIcon(notification.NotificationType)</span>
+                                        @DisplayNotificationType(notification.NotificationType)
+                                    </span>
+                                    @if (!notification.IsRead)
+                                    {
+                                        <span class="notification-new-label">Шинэ</span>
+                                    }
+                                </span>
+                                <span class="notification-item-title">@notification.Title</span>
+                                <span class="notification-item-message">@BuildNotificationSummary(notification)</span>
+                                <span class="notification-item-date">@notification.CreatedAt.ToString("yyyy-MM-dd HH:mm")</span>
+                            </button>
+                        }
+                    </div>
+                }
+            </section>
+        }
+    </div>
+}
+
+@if (selectedNotification is not null)
+{
+    <div class="notification-detail-backdrop" @onclick="CloseDetail">
+        <aside class="notification-detail-panel" @onclick:stopPropagation="true" aria-label="Мэдэгдлийн дэлгэрэнгүй">
+            <div class="notification-detail-header">
+                <div>
+                    <div class="notification-detail-type">
+                        <span class="notification-type-badge @GetNotificationTypeClass(selectedNotification.NotificationType)">
+                            <span aria-hidden="true">@GetNotificationIcon(selectedNotification.NotificationType)</span>
+                            @DisplayNotificationType(selectedNotification.NotificationType)
+                        </span>
+                    </div>
+                    <h2>@selectedNotification.Title</h2>
+                </div>
+                <button class="notification-detail-close" type="button" aria-label="Хаах" @onclick="CloseDetail">×</button>
+            </div>
+
+            <div class="notification-detail-meta">
+                <span>@selectedNotification.CreatedAt.ToString("yyyy-MM-dd HH:mm")</span>
+                @if (selectedNotification.TransactionId is not null)
+                {
+                    <span>Гүйлгээ #@selectedNotification.TransactionId</span>
+                }
+            </div>
+
+            <p class="notification-detail-message">@selectedNotification.Message</p>
+        </aside>
+    </div>
+}
+
+@code {
+    private long? userId;
+    private List<BankWebApp.Web.DTOs.Notifications.NotificationDto> notifications = [];
+    private BankWebApp.Web.DTOs.Notifications.NotificationDto? selectedNotification;
+    private bool isLoading = true;
+    private bool isOpen;
+
+    private int UnreadCount => notifications.Count(notification => !notification.IsRead);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated != true)
+        {
+            isLoading = false;
+            return;
+        }
+
+        var userIdValue = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!long.TryParse(userIdValue, out var parsedUserId))
+        {
+            isLoading = false;
+            return;
+        }
+
+        userId = parsedUserId;
+        await LoadNotificationsAsync();
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        if (userId is null)
+        {
+            return;
+        }
+
+        isLoading = true;
+        notifications = await NotificationService.GetRecentNotificationsAsync(userId.Value, 15);
+        isLoading = false;
+    }
+
+    private async Task ToggleOpen()
+    {
+        isOpen = !isOpen;
+        if (isOpen)
+        {
+            await LoadNotificationsAsync();
+        }
+    }
+
+    private async Task SelectNotificationAsync(BankWebApp.Web.DTOs.Notifications.NotificationDto notification)
+    {
+        selectedNotification = notification;
+        isOpen = false;
+
+        if (userId is not null && !notification.IsRead)
+        {
+            await NotificationService.MarkAsReadAsync(userId.Value, notification.Id);
+            notification.IsRead = true;
+        }
+    }
+
+    private void CloseDetail()
+    {
+        selectedNotification = null;
+    }
+
+    private static string DisplayNotificationType(string type)
+    {
+        return type switch
+        {
+            "TRANSACTION_SUCCESS" => "Гүйлгээ",
+            "TRANSACTION_FAILED" => "Гүйлгээ",
+            "SUSPICIOUS_GENERAL" => "Анхааруулга",
+            "SECURITY_REVIEW" => "Аюулгүй байдал",
+            "SECURITY_REVIEW_UPDATE" => "Шалгалт",
+            "ACCOUNT_CREATED" => "Данс",
+            "ACCOUNT_STATUS_UPDATED" => "Данс",
+            _ => "Систем"
+        };
+    }
+
+    private static string GetNotificationIcon(string type)
+    {
+        return type switch
+        {
+            "TRANSACTION_SUCCESS" => "$",
+            "TRANSACTION_FAILED" => "!",
+            "SECURITY_REVIEW" => "!",
+            "SECURITY_REVIEW_UPDATE" => "i",
+            "SUSPICIOUS_GENERAL" => "!",
+            "ACCOUNT_CREATED" or "ACCOUNT_STATUS_UPDATED" => "#",
+            _ => "i"
+        };
+    }
+
+    private static string GetNotificationTypeClass(string type)
+    {
+        return type switch
+        {
+            "TRANSACTION_SUCCESS" => "type-transaction",
+            "TRANSACTION_FAILED" => "type-warning",
+            "SECURITY_REVIEW" => "type-danger",
+            "SECURITY_REVIEW_UPDATE" => "type-review",
+            "SUSPICIOUS_GENERAL" => "type-danger",
+            "ACCOUNT_CREATED" or "ACCOUNT_STATUS_UPDATED" => "type-account",
+            _ => "type-system"
+        };
+    }
+
+    private static string BuildNotificationSummary(BankWebApp.Web.DTOs.Notifications.NotificationDto notification)
+    {
+        const int maxLength = 96;
+        var message = notification.Message.Trim();
+        return message.Length <= maxLength ? message : $"{message[..maxLength]}...";
+    }
+}

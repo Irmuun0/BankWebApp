@@ -18,6 +18,15 @@ else if (!string.IsNullOrWhiteSpace(errorMessage))
 }
 else if (account is not null)
 {
+    @if (!string.IsNullOrWhiteSpace(Success))
+    {
+        <div class="alert alert-success" role="alert">@Success</div>
+    }
+    @if (!string.IsNullOrWhiteSpace(Error))
+    {
+        <div class="alert alert-warning" role="alert">@Error</div>
+    }
+
     <div class="border rounded p-4" style="max-width: 720px;">
         <div class="mb-3">
             <div class="text-muted">Дансны дугаар</div>
@@ -56,6 +65,19 @@ else if (account is not null)
             <dt class="col-sm-4">Үндсэн эзэмшигч</dt>
             <dd class="col-sm-8">@OwnerName</dd>
         </dl>
+
+        <form class="border-top pt-3 mt-3" method="post" action="/accounts/set-primary">
+            <input type="hidden" name="AccountId" value="@account.Id" />
+            <input type="hidden" name="ReturnUrl" value="@($"/accounts/{account.Id}")" />
+            <div class="form-check mb-2">
+                <input class="form-check-input" id="isPrimaryAccount" type="checkbox" checked="@account.IsPrimary" disabled />
+                <label class="form-check-label" for="isPrimaryAccount">Үндсэн данс</label>
+            </div>
+            @if (!account.IsPrimary)
+            {
+                <button class="btn btn-outline-primary" type="submit" disabled="@(!account.IsActive)">Үндсэн данс болгох</button>
+            }
+        </form>
     </div>
 
     <div class="mt-3">
@@ -66,6 +88,12 @@ else if (account is not null)
 @code {
     [Parameter]
     public long Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "success")]
+    public string? Success { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
 
     private BankWebApp.Web.DTOs.Accounts.AccountDto? account;
     private bool isLoading = true;

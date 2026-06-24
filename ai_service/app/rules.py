@@ -2,7 +2,26 @@
 
 from decimal import Decimal
 from app.config import settings
-from app.models import SuspiciousDetectionRequest, SuspiciousDetectionResponse
+from app.models import SuspiciousDetectionRequest, SuspiciousDetectionResponse, SuspiciousDetectionRuleSetting
+
+
+DEFAULT_RULE_SETTINGS: dict[str, dict[str, Decimal | int | bool | None]] = {
+    "HIGH_AMOUNT_COMPARED_TO_AVERAGE": {"enabled": True, "score": 35, "numeric": Decimal("3")},
+    "VERY_HIGH_AMOUNT": {"enabled": True, "score": 30, "mnt": Decimal("5000000"), "usd": Decimal("1500")},
+    "NIGHT_TIME_TRANSACTION": {"enabled": True, "score": 15, "numeric": Decimal("6")},
+    "MANY_TRANSACTIONS_LAST_24_HOURS": {"enabled": True, "score": 20, "numeric": Decimal("5")},
+    "HIGH_CROSS_CURRENCY_TRANSACTION": {"enabled": True, "score": 15, "mnt": Decimal("1000000"), "usd": Decimal("300")},
+    "SUSPICIOUS_DESCRIPTION_KEYWORD": {"enabled": True, "score": 10},
+    "MANY_SMALL_TRANSACTIONS": {"enabled": True, "score": 20, "numeric": Decimal("10")},
+    "STRUCTURING_SMALL_SPLIT_TRANSFERS": {"enabled": True, "score": 35, "mnt": Decimal("5000000"), "usd": Decimal("1500")},
+    "RAPID_IN_OUT_FLOW": {"enabled": True, "score": 30, "numeric": Decimal("0.8")},
+    "NEW_ACCOUNT_HIGH_AMOUNT": {"enabled": True, "score": 25, "numeric": Decimal("7"), "mnt": Decimal("1000000"), "usd": Decimal("300")},
+    "DORMANT_ACCOUNT_ACTIVITY": {"enabled": True, "score": 25, "numeric": Decimal("30"), "mnt": Decimal("1000000"), "usd": Decimal("300")},
+    "MANY_RECEIVERS_SHORT_TIME": {"enabled": True, "score": 25, "numeric": Decimal("5")},
+    "MANY_SENDERS_TO_ONE_ACCOUNT": {"enabled": True, "score": 30, "numeric": Decimal("5")},
+    "GENERIC_OR_HIDDEN_DESCRIPTION": {"enabled": True, "score": 10},
+    "DESCRIPTION_AMOUNT_MISMATCH": {"enabled": True, "score": 20, "mnt": Decimal("3000000"), "usd": Decimal("1000")},
+}
 
 
 # Гүйлгээний утганд орвол эрсдэлийн нэмэлт оноо өгөх түлхүүр үгс.
@@ -56,95 +75,111 @@ def detect_suspicious(request: SuspiciousDetectionRequest) -> SuspiciousDetectio
     reasons: list[str] = []
     triggered_rules: list[str] = []
     source_currency = request.sourceCurrency.upper()
+    rule_settings = _build_rule_settings(request)
 
     # Хэрэглэгчийн өмнөх дундаж дүнгээс огцом өндөр эсэх.
-    if request.senderAverageAmountLast30Days > 0 and request.amount >= request.senderAverageAmountLast30Days * Decimal("3"):
-        score += 35
-        triggered_rules.append("HIGH_AMOUNT_COMPARED_TO_AVERAGE")
+    rule_code = "HIGH_AMOUNT_COMPARED_TO_AVERAGE"
+    if _is_enabled(rule_settings, rule_code) and request.senderAverageAmountLast30Days > 0 and request.amount >= request.senderAverageAmountLast30Days * _numeric(rule_settings, rule_code):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Гүйлгээний дүн хэрэглэгчийн сүүлийн 30 хоногийн дундаж гүйлгээнээс өндөр байна.")
 
     # Валют бүрийн маш өндөр дүнгийн босго.
-    if _is_very_high_amount(source_currency, request.amount):
-        score += 30
-        triggered_rules.append("VERY_HIGH_AMOUNT")
+    rule_code = "VERY_HIGH_AMOUNT"
+    if _is_enabled(rule_settings, rule_code) and _is_amount_at_least(rule_settings, rule_code, source_currency, request.amount):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Гүйлгээний дүн өндөр дүнтэй ангилалд орж байна.")
 
     # Шөнийн цагт хийсэн эсэх.
-    if 0 <= request.createdHour < 6:
-        score += 15
-        triggered_rules.append("NIGHT_TIME_TRANSACTION")
+    rule_code = "NIGHT_TIME_TRANSACTION"
+    if _is_enabled(rule_settings, rule_code) and 0 <= request.createdHour < int(_numeric(rule_settings, rule_code)):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Гүйлгээ шөнийн цагаар хийгдсэн байна.")
 
     # 24 цагийн дотор олон гүйлгээ хийсэн эсэх.
-    if request.senderTransactionCountLast24Hours >= 5:
-        score += 20
-        triggered_rules.append("MANY_TRANSACTIONS_LAST_24_HOURS")
+    rule_code = "MANY_TRANSACTIONS_LAST_24_HOURS"
+    if _is_enabled(rule_settings, rule_code) and request.senderTransactionCountLast24Hours >= int(_numeric(rule_settings, rule_code)):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Сүүлийн 24 цагт олон гүйлгээ хийсэн байна.")
 
     # Өндөр дүнтэй валют хөрвүүлэлт.
-    if request.isCrossCurrency and _is_high_cross_currency_amount(source_currency, request.amount):
-        score += 15
-        triggered_rules.append("HIGH_CROSS_CURRENCY_TRANSACTION")
+    rule_code = "HIGH_CROSS_CURRENCY_TRANSACTION"
+    if _is_enabled(rule_settings, rule_code) and request.isCrossCurrency and _is_amount_at_least(rule_settings, rule_code, source_currency, request.amount):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Өндөр дүнтэй валют хөрвүүлсэн гүйлгээ байна.")
 
     # Гүйлгээний утгад эрсдэлтэй түлхүүр үг байгаа эсэх.
-    if _has_suspicious_keyword(request.description):
-        score += 10
-        triggered_rules.append("SUSPICIOUS_DESCRIPTION_KEYWORD")
+    rule_code = "SUSPICIOUS_DESCRIPTION_KEYWORD"
+    if _is_enabled(rule_settings, rule_code) and _has_suspicious_keyword(request.description):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Гүйлгээний утгад анхаарах түлхүүр үг илэрсэн байна.")
 
     # Олон жижиг дүнтэй гүйлгээ.
-    if request.smallTransactionCountLast24Hours >= 10:
-        score += 20
-        triggered_rules.append("MANY_SMALL_TRANSACTIONS")
+    rule_code = "MANY_SMALL_TRANSACTIONS"
+    if _is_enabled(rule_settings, rule_code) and request.smallTransactionCountLast24Hours >= int(_numeric(rule_settings, rule_code)):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Сүүлийн 24 цагт олон жижиг дүнтэй гүйлгээ хийсэн байна.")
 
     # Жижиглэж шилжүүлсэн нийт дүн өндөр эсэх.
-    if _looks_like_structuring(source_currency, request.smallTransactionTotalLast24Hours):
-        score += 35
-        triggered_rules.append("STRUCTURING_SMALL_SPLIT_TRANSFERS")
+    rule_code = "STRUCTURING_SMALL_SPLIT_TRANSFERS"
+    if _is_enabled(rule_settings, rule_code) and _is_amount_at_least(rule_settings, rule_code, source_currency, request.smallTransactionTotalLast24Hours):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Том дүнг жижиглэн олон удаа шилжүүлсэн байж болзошгүй байна.")
 
     # Орж ирсэн мөнгийг богино хугацаанд гаргасан эсэх.
-    if request.recentInboundAmountLast30Minutes > 0 and request.amount >= request.recentInboundAmountLast30Minutes * Decimal("0.8"):
-        score += 30
-        triggered_rules.append("RAPID_IN_OUT_FLOW")
+    rule_code = "RAPID_IN_OUT_FLOW"
+    if _is_enabled(rule_settings, rule_code) and request.recentInboundAmountLast30Minutes > 0 and request.amount >= request.recentInboundAmountLast30Minutes * _numeric(rule_settings, rule_code):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Дансанд орсон мөнгийг богино хугацаанд дахин гаргасан шинж илэрсэн байна.")
 
     # Шинэ данснаас өндөр дүн гарч байгаа эсэх.
-    if request.senderAccountAgeDays <= 7 and _is_high_amount(source_currency, request.amount):
-        score += 25
-        triggered_rules.append("NEW_ACCOUNT_HIGH_AMOUNT")
+    rule_code = "NEW_ACCOUNT_HIGH_AMOUNT"
+    if _is_enabled(rule_settings, rule_code) and request.senderAccountAgeDays <= int(_numeric(rule_settings, rule_code)) and _is_amount_at_least(rule_settings, rule_code, source_currency, request.amount):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Шинэ данснаас өндөр дүнтэй гүйлгээ хийсэн байна.")
 
     # Удаан хөдөлгөөнгүй байсан данс өндөр дүн гаргаж байгаа эсэх.
-    if request.senderDaysSinceLastTransaction is not None and request.senderDaysSinceLastTransaction >= 30 and _is_high_amount(source_currency, request.amount):
-        score += 25
-        triggered_rules.append("DORMANT_ACCOUNT_ACTIVITY")
+    rule_code = "DORMANT_ACCOUNT_ACTIVITY"
+    if _is_enabled(rule_settings, rule_code) and request.senderDaysSinceLastTransaction is not None and request.senderDaysSinceLastTransaction >= int(_numeric(rule_settings, rule_code)) and _is_amount_at_least(rule_settings, rule_code, source_currency, request.amount):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Удаан хугацаанд гүйлгээгүй данснаас өндөр дүнтэй гүйлгээ хийсэн байна.")
 
     # Богино хугацаанд олон хүлээн авагч руу тараасан эсэх.
-    if request.distinctReceiverCountLast24Hours >= 5:
-        score += 25
-        triggered_rules.append("MANY_RECEIVERS_SHORT_TIME")
+    rule_code = "MANY_RECEIVERS_SHORT_TIME"
+    if _is_enabled(rule_settings, rule_code) and request.distinctReceiverCountLast24Hours >= int(_numeric(rule_settings, rule_code)):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Богино хугацаанд олон өөр хүлээн авагч руу мөнгө шилжүүлсэн байна.")
 
     # Нэг данс руу олон өөр хэрэглэгчээс мөнгө төвлөрсөн эсэх.
-    if request.distinctSenderCountToReceiverLast24Hours >= 5:
-        score += 30
-        triggered_rules.append("MANY_SENDERS_TO_ONE_ACCOUNT")
+    rule_code = "MANY_SENDERS_TO_ONE_ACCOUNT"
+    if _is_enabled(rule_settings, rule_code) and request.distinctSenderCountToReceiverLast24Hours >= int(_numeric(rule_settings, rule_code)):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Нэг хүлээн авагч данс руу богино хугацаанд олон өөр хэрэглэгчээс мөнгө орсон байна.")
 
     # Хэт ерөнхий, нуусан мэт гүйлгээний утга.
-    if _has_generic_or_hidden_description(request.description):
-        score += 10
-        triggered_rules.append("GENERIC_OR_HIDDEN_DESCRIPTION")
+    rule_code = "GENERIC_OR_HIDDEN_DESCRIPTION"
+    if _is_enabled(rule_settings, rule_code) and _has_generic_or_hidden_description(request.description):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Гүйлгээний утга хэт ерөнхий эсвэл санаатай нуусан мэт байна.")
 
     # Гүйлгээний утга бага хэрэглээ мэт боловч дүн хэт өндөр эсэх.
-    if _description_amount_mismatch(source_currency, request.amount, request.description):
-        score += 20
-        triggered_rules.append("DESCRIPTION_AMOUNT_MISMATCH")
+    rule_code = "DESCRIPTION_AMOUNT_MISMATCH"
+    if _is_enabled(rule_settings, rule_code) and _description_amount_mismatch(rule_settings, rule_code, source_currency, request.amount, request.description):
+        score += _score(rule_settings, rule_code)
+        triggered_rules.append(rule_code)
         reasons.append("Гүйлгээний утга болон мөнгөн дүн хоорондоо нийцэхгүй байна.")
 
     score = min(score, 100)
@@ -152,7 +187,7 @@ def detect_suspicious(request: SuspiciousDetectionRequest) -> SuspiciousDetectio
         reasons.append("Rule-based шалгалтаар өндөр эрсдэл илрээгүй.")
 
     return SuspiciousDetectionResponse(
-        isSuspicious=score >= settings.suspicious_threshold,
+        isSuspicious=score >= _suspicious_threshold(request),
         riskScore=score,
         reason=" ".join(reasons),
         triggeredRules=triggered_rules,
@@ -234,7 +269,13 @@ def _has_generic_or_hidden_description(description: str | None) -> bool:
     return normalized in generic_values or len(normalized) <= 2
 
 
-def _description_amount_mismatch(source_currency: str, amount: Decimal, description: str | None) -> bool:
+def _description_amount_mismatch(
+    rule_settings: dict[str, SuspiciousDetectionRuleSetting],
+    rule_code: str,
+    source_currency: str,
+    amount: Decimal,
+    description: str | None
+) -> bool:
     """Бага хэрэглээний утгатай боловч өндөр дүнтэй эсэх."""
 
     if not description:
@@ -248,8 +289,63 @@ def _description_amount_mismatch(source_currency: str, amount: Decimal, descript
     if not any(keyword in normalized for keyword in low_value_keywords):
         return False
 
+    return _is_amount_at_least(rule_settings, rule_code, source_currency, amount)
+
+
+def _build_rule_settings(request: SuspiciousDetectionRequest) -> dict[str, SuspiciousDetectionRuleSetting]:
+    """Request-ээр ирсэн admin тохиргоог default утгатай нэгтгэнэ."""
+
+    configured = {
+        item.ruleCode.upper(): item
+        for item in (request.detectionSettings.rules if request.detectionSettings else [])
+    }
+    merged: dict[str, SuspiciousDetectionRuleSetting] = {}
+
+    for rule_code, defaults in DEFAULT_RULE_SETTINGS.items():
+        item = configured.get(rule_code)
+        merged[rule_code] = SuspiciousDetectionRuleSetting(
+            ruleCode=rule_code,
+            isEnabled=item.isEnabled if item is not None else bool(defaults.get("enabled", True)),
+            score=item.score if item is not None else int(defaults.get("score", 0)),
+            numericThreshold=item.numericThreshold if item is not None and item.numericThreshold is not None else defaults.get("numeric"),
+            amountThresholdMnt=item.amountThresholdMnt if item is not None and item.amountThresholdMnt is not None else defaults.get("mnt"),
+            amountThresholdUsd=item.amountThresholdUsd if item is not None and item.amountThresholdUsd is not None else defaults.get("usd"),
+        )
+
+    return merged
+
+
+def _suspicious_threshold(request: SuspiciousDetectionRequest) -> int:
+    if request.detectionSettings is not None:
+        return request.detectionSettings.suspiciousThreshold
+    return settings.suspicious_threshold
+
+
+def _is_enabled(rule_settings: dict[str, SuspiciousDetectionRuleSetting], rule_code: str) -> bool:
+    return rule_settings[rule_code].isEnabled
+
+
+def _score(rule_settings: dict[str, SuspiciousDetectionRuleSetting], rule_code: str) -> int:
+    return rule_settings[rule_code].score
+
+
+def _numeric(rule_settings: dict[str, SuspiciousDetectionRuleSetting], rule_code: str) -> Decimal:
+    value = rule_settings[rule_code].numericThreshold
+    default_value = DEFAULT_RULE_SETTINGS[rule_code].get("numeric")
+    return value if value is not None else Decimal(default_value or 0)
+
+
+def _amount_threshold(rule_settings: dict[str, SuspiciousDetectionRuleSetting], rule_code: str, source_currency: str) -> Decimal:
+    rule = rule_settings[rule_code]
     if source_currency == "MNT":
-        return amount >= Decimal("3000000")
-    if source_currency == "USD":
-        return amount >= Decimal("1000")
-    return amount >= Decimal("1000")
+        return rule.amountThresholdMnt or Decimal(DEFAULT_RULE_SETTINGS[rule_code].get("mnt") or 0)
+    return rule.amountThresholdUsd or Decimal(DEFAULT_RULE_SETTINGS[rule_code].get("usd") or 0)
+
+
+def _is_amount_at_least(
+    rule_settings: dict[str, SuspiciousDetectionRuleSetting],
+    rule_code: str,
+    source_currency: str,
+    amount: Decimal
+) -> bool:
+    return amount >= _amount_threshold(rule_settings, rule_code, source_currency)

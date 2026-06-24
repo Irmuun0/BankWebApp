@@ -54,10 +54,10 @@
 
 @code {
     [SupplyParameterFromQuery]
-    private string? Error { get; set; }
+    public string? Error { get; set; }
 
     [SupplyParameterFromQuery]
-    private string? ReturnUrl { get; set; }
+    public string? ReturnUrl { get; set; }
 
     private string ReturnUrlOrDashboard => string.IsNullOrWhiteSpace(ReturnUrl) ? "/dashboard" : ReturnUrl;
 }

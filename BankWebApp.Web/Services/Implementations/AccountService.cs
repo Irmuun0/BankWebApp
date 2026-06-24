@@ -23,7 +23,8 @@ public class AccountService : IAccountService
         return await _dbContext.Accounts
             .AsNoTracking()
             .Where(account => account.UserId == userId)
-            .OrderByDescending(account => account.CreatedAt)
+            .OrderByDescending(account => account.IsPrimary)
+            .ThenByDescending(account => account.CreatedAt)
             .ThenByDescending(account => account.Id)
             .Select(account => new AccountDto
             {
@@ -33,6 +34,7 @@ public class AccountService : IAccountService
                 Currency = account.Currency,
                 Balance = account.Balance,
                 IsActive = account.IsActive,
+                IsPrimary = account.IsPrimary,
                 CreatedAt = account.CreatedAt,
                 OwnerName = ((account.User.FirstName ?? "") + " " + (account.User.LastName ?? "")).Trim()
             })
@@ -52,6 +54,7 @@ public class AccountService : IAccountService
                 Currency = account.Currency,
                 Balance = account.Balance,
                 IsActive = account.IsActive,
+                IsPrimary = account.IsPrimary,
                 CreatedAt = account.CreatedAt,
                 OwnerName = ((account.User.FirstName ?? "") + " " + (account.User.LastName ?? "")).Trim(),
                 LastTransactionAt = _dbContext.Transactions
@@ -100,6 +103,9 @@ public class AccountService : IAccountService
             return (false, "Зөвхөн MNT эсвэл USD валюттай данс нээх боломжтой.", null);
         }
 
+        var hasAnyAccount = await _dbContext.Accounts
+            .AnyAsync(account => account.UserId == userId, cancellationToken);
+
         for (var attempt = 0; attempt < 5; attempt++)
         {
             var accountNumber = GenerateAccountNumber();
@@ -120,6 +126,7 @@ public class AccountService : IAccountService
                 Currency = currency,
                 Balance = 0,
                 IsActive = true,
+                IsPrimary = !hasAnyAccount,
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -154,11 +161,65 @@ public class AccountService : IAccountService
             return (false, "Данс олдсонгүй эсвэл та энэ дансыг өөрчлөх эрхгүй байна.");
         }
 
+        var now = MongoliaClock.Now;
         account.IsActive = isActive;
-        account.UpdatedAt = MongoliaClock.Now;
+        account.UpdatedAt = now;
+
+        if (!isActive && account.IsPrimary)
+        {
+            account.IsPrimary = false;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            var replacementPrimary = await _dbContext.Accounts
+                .Where(item => item.UserId == userId && item.Id != accountId && item.IsActive)
+                .OrderByDescending(item => item.CreatedAt)
+                .ThenByDescending(item => item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (replacementPrimary is not null)
+            {
+                replacementPrimary.IsPrimary = true;
+                replacementPrimary.UpdatedAt = now;
+            }
+        }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return (true, isActive ? "Данс идэвхтэй боллоо." : "Данс идэвхгүй боллоо.");
+    }
+
+    public async Task<(bool Success, string? ErrorMessage)> SetPrimaryAccountAsync(
+        long userId,
+        long accountId,
+        CancellationToken cancellationToken = default)
+    {
+        var account = await _dbContext.Accounts
+            .FirstOrDefaultAsync(item => item.UserId == userId && item.Id == accountId, cancellationToken);
+
+        if (account is null)
+        {
+            return (false, "Данс олдсонгүй эсвэл та энэ дансыг өөрчлөх эрхгүй байна.");
+        }
+
+        if (!account.IsActive)
+        {
+            return (false, "Идэвхгүй дансыг үндсэн данс болгох боломжгүй.");
+        }
+
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var now = MongoliaClock.Now;
+
+        await _dbContext.Accounts
+            .Where(item => item.UserId == userId && item.IsPrimary)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.IsPrimary, false)
+                .SetProperty(item => item.UpdatedAt, now),
+                cancellationToken);
+
+        account.IsPrimary = true;
+        account.UpdatedAt = now;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return (true, "Үндсэн данс шинэчлэгдлээ.");
     }
 
     private static string GenerateAccountNumber()
@@ -176,6 +237,7 @@ public class AccountService : IAccountService
             Currency = account.Currency,
             Balance = account.Balance,
             IsActive = account.IsActive,
+            IsPrimary = account.IsPrimary,
             CreatedAt = account.CreatedAt
         };
     }

@@ -1,0 +1,12 @@
+<span class="help-tooltip @(Placement == "bottom" ? "help-tooltip-bottom" : "help-tooltip-top")" tabindex="0" aria-label="@Text">
+    <span class="help-tooltip-icon" aria-hidden="true">!</span>
+    <span class="help-tooltip-content" role="tooltip">@Text</span>
+</span>
+
+@code {
+    [Parameter]
+    public string Text { get; set; } = string.Empty;
+
+    [Parameter]
+    public string Placement { get; set; } = "top";
+}

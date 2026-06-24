@@ -1,6 +1,8 @@
-# Bank AI Service
+﻿# Bank AI Service
 
-Rule-based suspicious transaction detection service for the Bank Web Software MVP.
+Rule-based suspicious transaction detection and Gemini analysis service for the Bank Web Software MVP.
+
+This service does not connect to MSSQL. `BankWebApp.Web` prepares a sanitized transaction context, sends it to this API, then stores AI results and audit logs itself.
 
 ## Run on Windows
 
@@ -9,6 +11,7 @@ cd ai_service
 python -m venv .venv
 .\.venv\Scripts\activate
 pip install -r requirements.txt
+$env:GEMINI_API_KEY = "YOUR_API_KEY_HERE"
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -19,6 +22,7 @@ cd ai_service
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+export GEMINI_API_KEY="YOUR_API_KEY_HERE"
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -26,9 +30,25 @@ uvicorn app.main:app --reload --port 8000
 
 - `GET http://localhost:8000/health`
 - `POST http://localhost:8000/detect-suspicious`
+- `POST http://localhost:8000/analyze-transaction`
+- `POST http://localhost:8000/chat/ask`
+- `POST http://localhost:8000/chat/explain`
 - Swagger: `http://localhost:8000/docs`
 
 The service receives only transaction-related values. It must not receive password hashes, national IDs, phone numbers, email addresses, or full user profiles.
+
+## Gemini configuration
+
+Use environment variables or a local `.env` file:
+
+```text
+GEMINI_API_KEY=your_api_key_here
+GEMINI_MODEL=gemini-3.1-flash-lite
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
+GEMINI_TIMEOUT_SECONDS=120
+```
+
+`BankWebApp.Web` no longer calls Gemini directly. It calls this service using `AiService:BaseUrl`.
 
 ## Run rule tests
 
@@ -87,3 +107,5 @@ If the service uses another port:
 ```powershell
 .\scripts\test_detect_suspicious.ps1 -BaseUrl "http://localhost:8001"
 ```
+
+

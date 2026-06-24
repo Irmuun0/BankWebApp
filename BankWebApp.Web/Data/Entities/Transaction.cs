@@ -39,6 +39,8 @@ public partial class Transaction
 
     public virtual ICollection<ChatLog> ChatLogs { get; set; } = new List<ChatLog>();
 
+    public virtual ICollection<AiTransactionAnalysisLog> AiTransactionAnalysisLogs { get; set; } = new List<AiTransactionAnalysisLog>();
+
     public virtual ExchangeRateLog? ExchangeRateLog { get; set; }
 
     public virtual FxIncomeLog? FxIncomeLog { get; set; }

@@ -16,6 +16,8 @@ public partial class BankDbContext : DbContext
 
     public virtual DbSet<AdminSuspiciousTransactionView> AdminSuspiciousTransactionViews { get; set; }
 
+    public virtual DbSet<AiTransactionAnalysisLog> AiTransactionAnalysisLogs { get; set; }
+
     public virtual DbSet<AuditLog> AuditLogs { get; set; }
 
     public virtual DbSet<ChatLog> ChatLogs { get; set; }
@@ -29,6 +31,10 @@ public partial class BankDbContext : DbContext
     public virtual DbSet<ExchangeRateLog> ExchangeRateLogs { get; set; }
 
     public virtual DbSet<FxIncomeLog> FxIncomeLogs { get; set; }
+
+    public virtual DbSet<FraudDetectionSetting> FraudDetectionSettings { get; set; }
+
+    public virtual DbSet<FraudRuleSetting> FraudRuleSettings { get; set; }
 
     public virtual DbSet<KnowledgeBase> KnowledgeBases { get; set; }
 
@@ -58,7 +64,13 @@ public partial class BankDbContext : DbContext
 
             entity.HasIndex(e => e.IsActive, "idx_accounts_is_active");
 
+            entity.HasIndex(e => e.IsPrimary, "idx_accounts_is_primary");
+
             entity.HasIndex(e => e.UserId, "idx_accounts_user_id");
+
+            entity.HasIndex(e => e.UserId, "ux_accounts_one_primary_per_user")
+                .IsUnique()
+                .HasFilter("[is_primary] = 1");
 
             entity.HasIndex(e => e.AccountNumber, "uq_accounts_account_number").IsUnique();
 
@@ -82,6 +94,9 @@ public partial class BankDbContext : DbContext
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true, "df_accounts_is_active")
                 .HasColumnName("is_active");
+            entity.Property(e => e.IsPrimary)
+                .HasDefaultValue(false, "df_accounts_is_primary")
+                .HasColumnName("is_primary");
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())", "df_accounts_updated_at")
                 .HasColumnName("updated_at");
@@ -135,6 +150,49 @@ public partial class BankDbContext : DbContext
                 .HasColumnName("target_currency");
             entity.Property(e => e.ToAccountId).HasColumnName("to_account_id");
             entity.Property(e => e.TransactionId).HasColumnName("transaction_id");
+        });
+
+        modelBuilder.Entity<AiTransactionAnalysisLog>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pk_ai_transaction_analysis_logs");
+
+            entity.ToTable("ai_transaction_analysis_logs");
+
+            entity.HasIndex(e => e.CreatedAt, "idx_ai_analysis_created_at");
+
+            entity.HasIndex(e => e.IsSuspicious, "idx_ai_analysis_is_suspicious");
+
+            entity.HasIndex(e => e.TransactionId, "idx_ai_analysis_transaction_id");
+
+            entity.HasIndex(e => new { e.TransactionId, e.CreatedAt }, "idx_ai_analysis_transaction_created");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AnalyzedBy).HasColumnName("analyzed_by");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(CONVERT([datetime2](0),sysutcdatetime() AT TIME ZONE 'UTC' AT TIME ZONE 'Ulaanbaatar Standard Time'))", "df_ai_analysis_created_at")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Explanation).HasColumnName("explanation");
+            entity.Property(e => e.IsSuspicious).HasColumnName("is_suspicious");
+            entity.Property(e => e.ModelName)
+                .HasMaxLength(100)
+                .HasColumnName("model_name");
+            entity.Property(e => e.RecommendedAction)
+                .HasMaxLength(1000)
+                .HasColumnName("recommended_action");
+            entity.Property(e => e.RiskScore)
+                .HasColumnType("decimal(5, 2)")
+                .HasColumnName("risk_score");
+            entity.Property(e => e.SourceContextJson).HasColumnName("source_context_json");
+            entity.Property(e => e.TransactionId).HasColumnName("transaction_id");
+
+            entity.HasOne(d => d.AnalyzedByNavigation).WithMany(p => p.AiTransactionAnalysisLogs)
+                .HasForeignKey(d => d.AnalyzedBy)
+                .OnDelete(DeleteBehavior.NoAction)
+                .HasConstraintName("fk_ai_analysis_admin_user");
+
+            entity.HasOne(d => d.Transaction).WithMany(p => p.AiTransactionAnalysisLogs)
+                .HasForeignKey(d => d.TransactionId)
+                .HasConstraintName("fk_ai_analysis_transaction");
         });
 
         modelBuilder.Entity<AuditLog>(entity =>
@@ -474,6 +532,76 @@ public partial class BankDbContext : DbContext
                 .HasForeignKey<FxIncomeLog>(d => d.TransactionId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("fk_fx_income_transaction");
+        });
+
+        modelBuilder.Entity<FraudDetectionSetting>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pk_fraud_detection_settings");
+
+            entity.ToTable("fraud_detection_settings");
+
+            entity.Property(e => e.Id)
+                .ValueGeneratedNever()
+                .HasColumnName("id");
+            entity.Property(e => e.SuspiciousThreshold)
+                .HasDefaultValue(60, "df_fraud_detection_settings_threshold")
+                .HasColumnName("suspicious_threshold");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("(CONVERT([datetime2](0),sysutcdatetime() AT TIME ZONE 'UTC' AT TIME ZONE 'Ulaanbaatar Standard Time'))", "df_fraud_detection_settings_updated_at")
+                .HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.UpdatedByNavigation).WithMany()
+                .HasForeignKey(d => d.UpdatedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_fraud_detection_settings_updated_by");
+        });
+
+        modelBuilder.Entity<FraudRuleSetting>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pk_fraud_rule_settings");
+
+            entity.ToTable("fraud_rule_settings");
+
+            entity.HasIndex(e => e.IsEnabled, "idx_fraud_rule_settings_enabled");
+
+            entity.HasIndex(e => e.RuleCode, "uq_fraud_rule_settings_rule_code").IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AmountThresholdMnt)
+                .HasColumnType("decimal(18, 2)")
+                .HasColumnName("amount_threshold_mnt");
+            entity.Property(e => e.AmountThresholdUsd)
+                .HasColumnType("decimal(18, 2)")
+                .HasColumnName("amount_threshold_usd");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasColumnName("description");
+            entity.Property(e => e.DisplayName)
+                .HasMaxLength(160)
+                .HasColumnName("display_name");
+            entity.Property(e => e.IsEnabled)
+                .HasDefaultValue(true, "df_fraud_rule_settings_enabled")
+                .HasColumnName("is_enabled");
+            entity.Property(e => e.NumericThreshold)
+                .HasColumnType("decimal(18, 4)")
+                .HasColumnName("numeric_threshold");
+            entity.Property(e => e.RuleCode)
+                .HasMaxLength(80)
+                .HasColumnName("rule_code");
+            entity.Property(e => e.Score).HasColumnName("score");
+            entity.Property(e => e.SuspiciousThreshold)
+                .HasDefaultValue(60, "df_fraud_rule_settings_suspicious_threshold")
+                .HasColumnName("suspicious_threshold");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("(CONVERT([datetime2](0),sysutcdatetime() AT TIME ZONE 'UTC' AT TIME ZONE 'Ulaanbaatar Standard Time'))", "df_fraud_rule_settings_updated_at")
+                .HasColumnName("updated_at");
+            entity.Property(e => e.UpdatedBy).HasColumnName("updated_by");
+
+            entity.HasOne(d => d.UpdatedByNavigation).WithMany()
+                .HasForeignKey(d => d.UpdatedBy)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_fraud_rule_settings_updated_by");
         });
 
         modelBuilder.Entity<KnowledgeBase>(entity =>

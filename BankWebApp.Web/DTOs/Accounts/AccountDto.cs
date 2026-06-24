@@ -8,6 +8,7 @@ public class AccountDto
     public string Currency { get; set; } = string.Empty;
     public decimal Balance { get; set; }
     public bool IsActive { get; set; }
+    public bool IsPrimary { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastTransactionAt { get; set; }
     public string? OwnerName { get; set; }

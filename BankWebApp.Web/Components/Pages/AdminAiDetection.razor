@@ -1,0 +1,1087 @@
+@page "/admin/ai-detection"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+
+<style>
+    .ai-detection-shell {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+
+    .ai-detection-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        transition: flex-basis 180ms ease;
+    }
+
+    .ai-detection-shell.has-chat .ai-detection-main {
+        flex-basis: 60%;
+    }
+
+    .ai-text-block {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+    }
+
+    .ai-table-wrap {
+        overflow-x: auto;
+        overflow-y: visible;
+        border: 1px solid #e5e7eb;
+        border-radius: .75rem;
+    }
+
+    .ai-transactions-table {
+        min-width: 72rem;
+        table-layout: fixed;
+        margin-bottom: 0;
+    }
+
+    .ai-transactions-table th {
+        white-space: nowrap;
+        vertical-align: bottom;
+        color: #111827;
+        font-size: .9rem;
+        font-weight: 750;
+    }
+
+    .ai-transactions-table td {
+        vertical-align: middle;
+    }
+
+    .ai-nowrap {
+        white-space: nowrap;
+    }
+
+    .ai-description-cell {
+        max-width: 16rem;
+    }
+
+    .ai-description-text {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .ai-detection-shell.has-chat .ai-description-cell {
+        max-width: 11rem;
+    }
+
+    .ai-sticky-col {
+        position: sticky;
+        right: 0;
+        z-index: 2;
+        background: var(--bs-table-bg);
+        box-shadow: -14px 0 18px rgba(255, 255, 255, .88);
+    }
+
+    thead .ai-sticky-col {
+        z-index: 3;
+    }
+
+    tbody tr:has(.ai-action:hover),
+    tbody tr:has(.ai-action:focus-within) {
+        position: relative;
+        z-index: 30;
+    }
+
+    tbody tr:has(.ai-action:hover) .ai-sticky-col,
+    tbody tr:has(.ai-action:focus-within) .ai-sticky-col {
+        z-index: 40;
+    }
+
+    .ai-action {
+        position: relative;
+        display: inline-flex;
+        padding-bottom: .45rem;
+        margin-bottom: -.45rem;
+        z-index: 1;
+    }
+
+    .ai-action:hover,
+    .ai-action:focus-within {
+        z-index: 100;
+    }
+
+    .ai-action-toggle {
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 999px;
+        border: 1px solid #d8dee8;
+        background: #ffffff;
+        color: #1f6fd1;
+        font-weight: 700;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .08);
+    }
+
+    .ai-action-menu {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        min-width: 11rem;
+        padding: .35rem;
+        border: 1px solid #d8dee8;
+        border-radius: .5rem;
+        background: #ffffff;
+        box-shadow: 0 12px 32px rgba(15, 23, 42, .16);
+        display: none;
+        z-index: 1000;
+        pointer-events: auto;
+    }
+
+    .ai-action-menu::before {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: -.5rem;
+        width: 100%;
+        height: .5rem;
+    }
+
+    .ai-action:hover .ai-action-menu,
+    .ai-action:focus-within .ai-action-menu {
+        display: block;
+    }
+
+    .ai-action-menu .dropdown-item,
+    .ai-action-menu button.dropdown-item {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        text-align: left;
+        border-radius: .35rem;
+        padding: .45rem .6rem;
+    }
+
+    .ai-analysis-details summary {
+        cursor: pointer;
+        color: #1f6fd1;
+        font-weight: 600;
+    }
+
+    .ai-analysis-toggle summary {
+        list-style: none;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        border: 1px solid #d8dee8;
+        border-radius: 999px;
+        background: #f8fbff;
+        color: #1f6fd1;
+        font-size: .78rem;
+        font-weight: 600;
+        padding: .35rem .55rem;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .06);
+        white-space: nowrap;
+    }
+
+    .ai-analysis-toggle summary:hover,
+    .ai-analysis-toggle summary:focus {
+        background: #eef6ff;
+        border-color: #b9d7ff;
+    }
+
+    .ai-analysis-toggle summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .ai-explanation-row {
+        display: none;
+    }
+
+    tr:has(.ai-analysis-toggle[open]) + .ai-explanation-row {
+        display: table-row;
+    }
+
+    .ai-action-group {
+        min-width: 8.2rem;
+        justify-content: flex-end;
+    }
+
+    .codex-chat-panel {
+        flex: 0 0 var(--ai-chat-width, min(42rem, 40vw));
+        width: var(--ai-chat-width, min(42rem, 40vw));
+        min-width: 24rem;
+        max-width: 44rem;
+        height: calc(100vh - 1rem);
+        position: sticky;
+        top: .5rem;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: #f7f7f8;
+        border: 1px solid #dfe3ea;
+        border-radius: 1rem;
+        box-shadow: 0 18px 48px rgba(15, 23, 42, .14);
+    }
+
+    .codex-panel-resizer {
+        position: absolute;
+        left: -.35rem;
+        top: 0;
+        bottom: 0;
+        width: .7rem;
+        cursor: col-resize;
+        z-index: 6;
+        touch-action: none;
+    }
+
+    .codex-panel-resizer::after {
+        content: "";
+        position: absolute;
+        left: .28rem;
+        top: 1rem;
+        bottom: 1rem;
+        width: 2px;
+        border-radius: 999px;
+        background: transparent;
+        transition: background 120ms ease;
+    }
+
+    .codex-panel-resizer:hover::after,
+    body.codex-resizing .codex-panel-resizer::after {
+        background: #9ca3af;
+    }
+
+    body.codex-resizing {
+        cursor: col-resize;
+        user-select: none;
+    }
+
+    .codex-chat-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.05rem;
+        background: rgba(255, 255, 255, .94);
+        border-bottom: 1px solid #e3e7ee;
+    }
+
+    .codex-kicker {
+        color: #6b7280;
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+    }
+
+    .codex-chat-title {
+        margin: .1rem 0 0;
+        color: #111827;
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .codex-icon-button {
+        width: 2rem;
+        height: 2rem;
+        border: 1px solid #d7dce4;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #374151;
+        background: #ffffff;
+        text-decoration: none;
+        font-size: 1.1rem;
+        line-height: 1;
+    }
+
+    .codex-icon-button:hover,
+    .codex-icon-button:focus {
+        color: #111827;
+        background: #f3f4f6;
+    }
+
+    .codex-chat-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: .9rem;
+        padding: 1rem;
+    }
+
+    .codex-context-card,
+    .codex-analysis-card {
+        background: #ffffff;
+        border: 1px solid #e2e6ed;
+        border-radius: .9rem;
+        padding: .95rem;
+    }
+
+    .codex-context-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+    }
+
+    .codex-data-label {
+        color: #6b7280;
+        font-size: .75rem;
+        line-height: 1.2;
+    }
+
+    .codex-data-value {
+        color: #111827;
+        font-size: .92rem;
+        font-weight: 650;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .codex-chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .45rem;
+        margin-top: .8rem;
+    }
+
+    .codex-chip {
+        border: 1px solid #dfe4ec;
+        border-radius: 999px;
+        padding: .25rem .55rem;
+        color: #374151;
+        background: #f9fafb;
+        font-size: .78rem;
+        font-weight: 600;
+    }
+
+    .codex-details {
+        margin-top: .8rem;
+        border-top: 1px solid #edf0f4;
+        padding-top: .7rem;
+    }
+
+    .codex-details summary {
+        cursor: pointer;
+        color: #1f2937;
+        font-size: .86rem;
+        font-weight: 650;
+    }
+
+    .codex-section-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: .75rem;
+    }
+
+    .codex-section-title {
+        color: #111827;
+        font-size: .95rem;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .codex-section-meta {
+        color: #6b7280;
+        font-size: .76rem;
+        margin-top: .18rem;
+    }
+
+    .codex-score {
+        flex: 0 0 auto;
+        border: 1px solid #dfe4ec;
+        border-radius: 999px;
+        padding: .28rem .55rem;
+        color: #111827;
+        background: #f9fafb;
+        font-size: .76rem;
+        font-weight: 700;
+    }
+
+    .codex-analysis-text {
+        max-height: 18rem;
+        overflow: auto;
+        margin-top: .75rem;
+        padding: .85rem;
+        border: 1px solid #edf0f4;
+        border-radius: .7rem;
+        background: #fbfbfc;
+        color: #111827;
+        line-height: 1.58;
+    }
+
+    .codex-thread {
+        display: flex;
+        flex-direction: column;
+        gap: .85rem;
+        padding-bottom: .2rem;
+    }
+
+    .codex-empty {
+        border: 1px dashed #d5dbe5;
+        border-radius: .9rem;
+        padding: 1rem;
+        color: #6b7280;
+        background: rgba(255, 255, 255, .7);
+        font-size: .88rem;
+    }
+
+    .codex-message {
+        display: flex;
+        flex-direction: column;
+        gap: .3rem;
+    }
+
+    .codex-message-user {
+        align-items: flex-end;
+    }
+
+    .codex-message-ai {
+        align-items: flex-start;
+    }
+
+    .codex-message-label {
+        color: #6b7280;
+        font-size: .72rem;
+        font-weight: 700;
+    }
+
+    .codex-bubble {
+        max-width: 88%;
+        border-radius: 1rem;
+        padding: .75rem .9rem;
+        line-height: 1.55;
+        overflow-wrap: anywhere;
+    }
+
+    .codex-message-user .codex-bubble {
+        color: #ffffff;
+        background: #1f2937;
+        border-bottom-right-radius: .35rem;
+    }
+
+    .codex-message-ai .codex-bubble {
+        color: #111827;
+        background: #ffffff;
+        border: 1px solid #e2e6ed;
+        border-bottom-left-radius: .35rem;
+    }
+
+    .codex-message-time {
+        color: #6b7280;
+        font-size: .72rem;
+    }
+
+    .codex-composer {
+        flex: 0 0 auto;
+        border-top: 1px solid #e3e7ee;
+        padding: .85rem;
+        background: rgba(255, 255, 255, .96);
+    }
+
+    .codex-model-row {
+        display: flex;
+        align-items: center;
+        gap: .6rem;
+        margin-bottom: .65rem;
+    }
+
+    .codex-model-row label {
+        margin: 0;
+        color: #6b7280;
+        font-size: .78rem;
+        font-weight: 700;
+    }
+
+    .codex-model-select {
+        flex: 1 1 auto;
+        min-width: 0;
+        border: 1px solid #d7dce4;
+        border-radius: .7rem;
+        background: #ffffff;
+        color: #111827;
+        padding: .45rem .65rem;
+        font-size: .9rem;
+    }
+
+    .codex-composer-row {
+        display: flex;
+        align-items: flex-end;
+        gap: .5rem;
+        border: 1px solid #d7dce4;
+        border-radius: 1rem;
+        background: #ffffff;
+        padding: .5rem;
+        box-shadow: 0 1px 0 rgba(15, 23, 42, .03);
+    }
+
+    .codex-composer-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 2.35rem;
+        max-height: 9rem;
+        border: 0;
+        outline: 0;
+        resize: vertical;
+        color: #111827;
+        background: transparent;
+        line-height: 1.45;
+        padding: .45rem .35rem;
+    }
+
+    .codex-send-button {
+        flex: 0 0 auto;
+        width: 2.35rem;
+        height: 2.35rem;
+        border: 0;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff;
+        background: #111827;
+    }
+
+    .codex-send-button:hover,
+    .codex-send-button:focus {
+        background: #000000;
+    }
+
+    @@media (max-width: 992px) {
+        .ai-detection-shell {
+            display: block;
+        }
+
+        .codex-chat-panel {
+            position: static;
+            height: auto;
+            width: auto;
+            min-width: 0;
+            max-width: none;
+            margin-top: 1rem;
+        }
+
+        .codex-panel-resizer {
+            display: none;
+        }
+
+        .codex-context-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .codex-bubble {
+            max-width: 100%;
+        }
+    }
+</style>
+
+<PageTitle>Админ - AI Detection</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>AI Detection</h1>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="alert alert-success" role="alert">@Success</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="alert alert-danger" role="alert">@Error</div>
+}
+
+<div class="ai-detection-shell @(pageModel.ChatTransaction is not null ? "has-chat" : "")">
+    <main class="ai-detection-main">
+        <form class="border rounded p-3 mb-3" method="get" action="/admin/ai-detection">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-lg-3">
+                    <label class="form-label" for="search">Ерөнхий хайлт</label>
+                    <input class="form-control" id="search" name="search" value="@Search" placeholder="Данс, төлөв, утга" />
+                </div>
+                <div class="col-12 col-lg-2">
+                    <label class="form-label" for="username">Хэрэглэгч</label>
+                    <input class="form-control" id="username" name="username" value="@Username" placeholder="Ж: Бат" />
+                </div>
+                <div class="col-6 col-lg-1">
+                    <label class="form-label" for="currency">Валют</label>
+                    <select class="form-select" id="currency" name="currency">
+                        <option value="">Бүгд</option>
+                        <option value="MNT" selected="@(Currency == "MNT")">MNT</option>
+                        <option value="USD" selected="@(Currency == "USD")">USD</option>
+                    </select>
+                </div>
+                <div class="col-6 col-lg-1">
+                    <label class="form-label" for="minRiskScore">Min score</label>
+                    <input class="form-control" id="minRiskScore" type="number" min="0" max="100" step="1" name="minRiskScore" value="@MinRiskScore" />
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label" for="startDate">Эхлэх</label>
+                    <input class="form-control" id="startDate" type="date" name="startDate" value="@StartDate?.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label" for="endDate">Дуусах</label>
+                    <input class="form-control" id="endDate" type="date" name="endDate" value="@EndDate?.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-6 col-lg-1">
+                    <label class="form-label" for="pageSize">Мөр</label>
+                    <select class="form-select" id="pageSize" name="pageSize">
+                        <option value="50" selected="@(PageSize != 100)">50</option>
+                        <option value="100" selected="@(PageSize == 100)">100</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex gap-2 flex-wrap">
+                    <button class="btn btn-outline-primary" type="submit">Шүүх</button>
+                    <a class="btn btn-outline-secondary" href="/admin/ai-detection">Цэвэрлэх</a>
+                    <a class="btn btn-outline-secondary" href="@BuildPresetHref("yesterday")">Өчигдөр</a>
+                    <a class="btn btn-outline-secondary" href="@BuildPresetHref("last7")">7 хоног</a>
+                    <a class="btn btn-outline-secondary" href="@BuildPresetHref("highRisk")">Score 60+</a>
+                </div>
+            </div>
+        </form>
+
+        @if (isLoading)
+        {
+            <p><em>Уншиж байна...</em></p>
+        }
+        else if (pageModel.Transactions.Items.Count == 0)
+        {
+            <p>Шүүлтүүрт тохирох гүйлгээ олдсонгүй.</p>
+        }
+        else
+        {
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">
+                    Нийт @pageModel.Transactions.TotalItems.ToString("N0") гүйлгээ. Энэ хуудсанд @pageModel.Transactions.Items.Count мөр байна.
+                </div>
+                <div class="small text-muted">AI үйлдлийг тухайн мөрийн AI icon дээрээс ажиллуулна.</div>
+            </div>
+
+            <div class="ai-table-wrap">
+                <table class="table table-striped align-middle ai-transactions-table">
+                    <colgroup>
+                        <col style="width: 8rem;" />
+                        <col style="width: 8.5rem;" />
+                        <col style="width: 8.5rem;" />
+                        <col style="width: 9rem;" />
+                        <col style="width: 5.5rem;" />
+                        <col style="width: 5.5rem;" />
+                        <col style="width: 7.5rem;" />
+                        <col style="width: 12rem;" />
+                        <col style="width: 9.5rem;" />
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>Огноо</th>
+                            <th>Илгээгч</th>
+                            <th>Хүлээн авагч</th>
+                            <th>Дүн</th>
+                            <th>Rule score</th>
+                            <th>AI score</th>
+                            <th>AI result</th>
+                            <th>Утга</th>
+                            <th class="text-end ai-sticky-col">AI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var transaction in pageModel.Transactions.Items)
+                        {
+                            <tr>
+                                <td class="ai-nowrap">@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td>
+                                    <div>@transaction.FromAccountNumber</div>
+                                    <div class="small text-muted">@transaction.FromUserName</div>
+                                </td>
+                                <td>
+                                    <div>@transaction.ToAccountNumber</div>
+                                    <div class="small text-muted">@transaction.ToUserName</div>
+                                </td>
+                                <td>
+                                    <div class="ai-nowrap">@transaction.Amount.ToString("N2") @transaction.SourceCurrency</div>
+                                    <div class="small text-muted ai-nowrap">@transaction.CreditedAmount.ToString("N2") @transaction.TargetCurrency</div>
+                                </td>
+                                <td>@(transaction.RuleRiskScore?.ToString("N2") ?? "-")</td>
+                                <td>@(transaction.LatestAiRiskScore?.ToString("N2") ?? "-")</td>
+                                <td>
+                                    @if (transaction.LatestAiIsSuspicious is null)
+                                    {
+                                        <span class="badge text-bg-secondary">Шинжлээгүй</span>
+                                    }
+                                    else if (transaction.LatestAiIsSuspicious == true)
+                                    {
+                                        <span class="badge text-bg-danger">Сэжигтэй</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-success">Хэвийн</span>
+                                    }
+                                    @if (transaction.LatestAiAnalyzedAt is not null)
+                                    {
+                                        <div class="small text-muted">@transaction.LatestAiAnalyzedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                                    }
+                                </td>
+                                <td class="ai-description-cell">
+                                    <div class="ai-description-text" title="@transaction.Description">@transaction.Description</div>
+                                </td>
+                                <td class="text-end ai-sticky-col">
+                                    <div class="d-inline-flex align-items-center gap-2 ai-action-group">
+                                        @if (!string.IsNullOrWhiteSpace(transaction.LatestAiExplanation))
+                                        {
+                                            <details class="ai-analysis-toggle">
+                                                <summary>
+                                                    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+                                                        <path d="M3 3.5h10M3 6.8h7M3 10.1h5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                                                    </svg>
+                                                    <span>Тайлбар</span>
+                                                </summary>
+                                            </details>
+                                        }
+                                        <div class="ai-action">
+                                        <button class="ai-action-toggle" type="button" aria-label="AI actions">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                                                <path d="M12 2.75l1.35 4.1a5.5 5.5 0 0 0 3.8 3.8L21.25 12l-4.1 1.35a5.5 5.5 0 0 0-3.8 3.8L12 21.25l-1.35-4.1a5.5 5.5 0 0 0-3.8-3.8L2.75 12l4.1-1.35a5.5 5.5 0 0 0 3.8-3.8L12 2.75z" fill="currentColor" />
+                                            </svg>
+                                        </button>
+                                        <div class="ai-action-menu">
+                                            <form method="post" action="/admin/ai-detection/analyze">
+                                                <input type="hidden" name="TransactionId" value="@transaction.Id" />
+                                                <input type="hidden" name="ModelName" value="@DefaultAiModel" />
+                                                <input type="hidden" name="ReturnUrl" value="@BuildChatReturnUrl(transaction.Id)" />
+                                                <button class="dropdown-item" type="submit">AI detection</button>
+                                            </form>
+                                            <a class="dropdown-item text-decoration-none text-body" href="@BuildChatHref(transaction.Id)">AI chat</a>
+                                        </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                            @if (!string.IsNullOrWhiteSpace(transaction.LatestAiExplanation))
+                            {
+                                <tr class="ai-explanation-row">
+                                    <td colspan="9" class="small bg-white">
+                                        <div class="border rounded p-3">
+                                            <div class="fw-semibold mb-2">AI тайлбар</div>
+                                            <div class="ai-text-block">@DisplayAiText(transaction.LatestAiExplanation)</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <nav class="d-flex align-items-center gap-2 mt-3" aria-label="AI detection pagination">
+                <a class="btn btn-sm btn-outline-secondary @(pageModel.Transactions.Page <= 1 ? "disabled" : "")" href="@BuildPageHref(pageModel.Transactions.Page - 1)">Өмнөх</a>
+                <span class="small text-muted">@pageModel.Transactions.Page / @pageModel.Transactions.TotalPages</span>
+                <a class="btn btn-sm btn-outline-secondary @(pageModel.Transactions.Page >= pageModel.Transactions.TotalPages ? "disabled" : "")" href="@BuildPageHref(pageModel.Transactions.Page + 1)">Дараах</a>
+            </nav>
+        }
+    </main>
+
+    @if (pageModel.ChatTransaction is not null)
+    {
+        <aside id="ai-chat-panel" class="codex-chat-panel" aria-label="AI chat panel">
+            <div class="codex-panel-resizer" aria-hidden="true"></div>
+            <div class="codex-chat-header">
+                <div>
+                    <div class="codex-kicker">AI review</div>
+                    <h2 class="codex-chat-title">Гүйлгээ #@pageModel.ChatTransaction.Id</h2>
+                </div>
+                <a class="codex-icon-button" href="@CurrentListUrl" aria-label="Хаах">×</a>
+            </div>
+
+            <div class="codex-chat-body">
+                <section class="codex-context-card">
+                    <div class="codex-context-grid">
+                        <div>
+                            <div class="codex-data-label">Огноо</div>
+                            <div class="codex-data-value">@pageModel.ChatTransaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</div>
+                        </div>
+                        <div>
+                            <div class="codex-data-label">Гүйлгээний утга</div>
+                            <div class="codex-data-value">@pageModel.ChatTransaction.Description</div>
+                        </div>
+                        <div>
+                            <div class="codex-data-label">Илгээсэн</div>
+                            <div class="codex-data-value">@pageModel.ChatTransaction.Amount.ToString("N2") @pageModel.ChatTransaction.SourceCurrency</div>
+                        </div>
+                        <div>
+                            <div class="codex-data-label">Хүлээн авсан</div>
+                            <div class="codex-data-value">@pageModel.ChatTransaction.CreditedAmount.ToString("N2") @pageModel.ChatTransaction.TargetCurrency</div>
+                        </div>
+                    </div>
+
+                    <div class="codex-chip-row">
+                        <span class="codex-chip">Rule score @(pageModel.ChatTransaction.RuleRiskScore?.ToString("N2") ?? "-")</span>
+                        <span class="codex-chip">AI score @(pageModel.ChatTransaction.LatestAiRiskScore?.ToString("N2") ?? "-")</span>
+                    </div>
+
+                    <details class="codex-details">
+                        <summary>Гүйлгээний дэлгэрэнгүй</summary>
+                        <dl class="row small mt-2 mb-0">
+                            <dt class="col-5">Илгээгч</dt>
+                            <dd class="col-7">@pageModel.ChatTransaction.FromUserName / @pageModel.ChatTransaction.FromAccountNumber</dd>
+                            <dt class="col-5">Хүлээн авагч</dt>
+                            <dd class="col-7">@pageModel.ChatTransaction.ToUserName / @pageModel.ChatTransaction.ToAccountNumber</dd>
+                            <dt class="col-5">Rule шалтгаан</dt>
+                            <dd class="col-7 ai-text-block">@DisplayAiText(pageModel.ChatTransaction.RuleReason)</dd>
+                        </dl>
+                    </details>
+                </section>
+
+                <section class="codex-analysis-card">
+                    <div class="codex-section-head">
+                        <div>
+                            <div class="codex-section-title">AI-ийн шинжилгээний үр дүн</div>
+                            <div class="codex-section-meta">
+                                @(pageModel.ChatTransaction.LatestAiAnalyzedAt?.ToString("yyyy-MM-dd HH:mm") ?? "Огноо байхгүй")
+                            </div>
+                        </div>
+                        <span class="codex-score">Risk @(pageModel.ChatTransaction.LatestAiRiskScore?.ToString("N2") ?? "00")</span>
+                    </div>
+
+                    @if (string.IsNullOrWhiteSpace(pageModel.ChatTransaction.LatestAiExplanation))
+                    {
+                        <form class="mt-3" method="post" action="/admin/ai-detection/analyze">
+                            <input type="hidden" name="TransactionId" value="@pageModel.ChatTransaction.Id" />
+                            <input type="hidden" name="ModelName" value="@DefaultAiModel" />
+                            <input type="hidden" name="ReturnUrl" value="@BuildChatReturnUrl(pageModel.ChatTransaction.Id)" />
+                            <button class="btn btn-dark w-100" type="submit">AI тайлбар авах</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="codex-analysis-text ai-text-block">@DisplayAiText(pageModel.ChatTransaction.LatestAiExplanation)</div>
+                    }
+                </section>
+
+                <section class="codex-thread" aria-label="AI chat history">
+                    @if (pageModel.ChatMessages.Count == 0)
+                    {
+                        <div class="codex-empty">Өмнөх chat энд харагдана. Энэ гүйлгээний эрсдэл, rule оноо, хэрэглэгчийн хэв маягийн талаар асууж болно.</div>
+                    }
+                    else
+                    {
+                        @foreach (var message in pageModel.ChatMessages)
+                        {
+                            <article class="codex-message codex-message-user">
+                                <div class="codex-message-label">Админ</div>
+                                <div class="codex-bubble">@message.Question</div>
+                            </article>
+                            <article class="codex-message codex-message-ai">
+                                <div class="codex-message-label">AI</div>
+                                <div class="codex-bubble ai-text-block">@DisplayAiText(message.Answer)</div>
+                                <time class="codex-message-time">@message.CreatedAt.ToString("yyyy-MM-dd HH:mm")</time>
+                            </article>
+                        }
+                    }
+                </section>
+            </div>
+
+            <form class="codex-composer" method="post" action="/admin/ai-detection/chat">
+                <input type="hidden" name="TransactionId" value="@pageModel.ChatTransaction.Id" />
+                <input type="hidden" name="ReturnUrl" value="@BuildChatReturnUrl(pageModel.ChatTransaction.Id)" />
+
+                <div class="codex-model-row">
+                    <label for="modelName">Model</label>
+                    <select class="codex-model-select" id="modelName" name="ModelName">
+                        <option value="gemini-3.1-flash-lite" label="Gemini 3.1 Flash Lite" selected>Gemini 3.1 Flash Lite</option>
+                        <option value="gemini-2.5-flash" label="Gemini 2.5 Flash">Gemini 2.5 Flash        өдөрт 20 асуултын хязгаартай</option>
+                        <option value="gemini-3.5-flash" label="Gemini 3.5 Flash">Gemini 3.5 Flash        өдөрт 20 асуултын хязгаартай</option>
+                    </select>
+                </div>
+
+                <div class="codex-composer-row">
+                    <textarea class="codex-composer-input" id="question" name="Question" rows="1" required placeholder="Асуулт оруул"></textarea>
+                    <button class="codex-send-button" type="submit" aria-label="Илгээх">
+                        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                            <path d="M2 8h10.2M8.5 4.2 12.3 8l-3.8 3.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                </div>
+            </form>
+        </aside>
+    }
+</div>
+
+<script>
+    (() => {
+        const storageKey = "bank-admin-ai-chat-width";
+
+        function initializeAiChatResize() {
+            const panel = document.getElementById("ai-chat-panel");
+            if (!panel || panel.dataset.resizeReady === "1") {
+                return;
+            }
+
+            const handle = panel.querySelector(".codex-panel-resizer");
+            const shell = panel.closest(".ai-detection-shell");
+            if (!handle || !shell) {
+                return;
+            }
+
+            panel.dataset.resizeReady = "1";
+            const savedWidth = window.localStorage.getItem(storageKey);
+            if (savedWidth) {
+                panel.style.setProperty("--ai-chat-width", savedWidth);
+            }
+
+            handle.addEventListener("pointerdown", event => {
+                if (window.innerWidth < 992) {
+                    return;
+                }
+
+                event.preventDefault();
+                handle.setPointerCapture?.(event.pointerId);
+                document.body.classList.add("codex-resizing");
+
+                const updateWidth = moveEvent => {
+                    const shellRect = shell.getBoundingClientRect();
+                    const maxWidth = Math.min(760, shellRect.width * 0.66);
+                    const nextWidth = Math.min(Math.max(shellRect.right - moveEvent.clientX, 360), maxWidth);
+                    const cssValue = Math.round(nextWidth) + "px";
+                    panel.style.setProperty("--ai-chat-width", cssValue);
+                    window.localStorage.setItem(storageKey, cssValue);
+                };
+
+                const stopResize = () => {
+                    document.body.classList.remove("codex-resizing");
+                    window.removeEventListener("pointermove", updateWidth);
+                    window.removeEventListener("pointerup", stopResize);
+                    window.removeEventListener("pointercancel", stopResize);
+                };
+
+                window.addEventListener("pointermove", updateWidth);
+                window.addEventListener("pointerup", stopResize);
+                window.addEventListener("pointercancel", stopResize);
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", initializeAiChatResize);
+        document.addEventListener("enhancedload", initializeAiChatResize);
+        initializeAiChatResize();
+    })();
+</script>
+
+@code {
+    private const string DefaultAiModel = "gemini-3.1-flash-lite";
+    private AdminAiDetectionPageDto pageModel = new();
+    private bool isLoading = true;
+
+    [SupplyParameterFromQuery]
+    public string? Search { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Username { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Currency { get; set; }
+
+    [SupplyParameterFromQuery]
+    public decimal? MinRiskScore { get; set; }
+
+    [SupplyParameterFromQuery]
+    public DateOnly? StartDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    public DateOnly? EndDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    public long? ChatTransactionId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public int Page { get; set; } = 1;
+
+    [SupplyParameterFromQuery]
+    public int PageSize { get; set; } = 50;
+
+    [SupplyParameterFromQuery]
+    public string? Success { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+
+    private string CurrentListUrl => BuildPageHref(Page, includeChat: false);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        pageModel = await AdminService.GetAiDetectionPageAsync(
+            Search,
+            Username,
+            Currency,
+            MinRiskScore,
+            StartDate,
+            EndDate,
+            ChatTransactionId,
+            Page,
+            PageSize);
+
+        isLoading = false;
+    }
+
+    private string BuildPresetHref(string preset)
+    {
+        var today = MongoliaClock.Today;
+        return preset switch
+        {
+            "yesterday" => $"/admin/ai-detection?startDate={today.AddDays(-1):yyyy-MM-dd}&endDate={today.AddDays(-1):yyyy-MM-dd}&pageSize={NormalizedPageSize}",
+            "last7" => $"/admin/ai-detection?startDate={today.AddDays(-6):yyyy-MM-dd}&endDate={today:yyyy-MM-dd}&pageSize={NormalizedPageSize}",
+            "highRisk" => $"/admin/ai-detection?minRiskScore=60&pageSize={NormalizedPageSize}",
+            _ => "/admin/ai-detection"
+        };
+    }
+
+    private string BuildChatHref(long transactionId)
+    {
+        return BuildChatReturnUrl(transactionId);
+    }
+
+    private string BuildChatReturnUrl(long transactionId)
+    {
+        return $"{BuildPageHref(Page, includeChat: false)}&chatTransactionId={transactionId}";
+    }
+
+    private string BuildPageHref(int page, bool includeChat = true)
+    {
+        var query = new List<string>
+        {
+            $"page={Math.Max(1, page)}",
+            $"pageSize={NormalizedPageSize}"
+        };
+
+        AddQuery(query, "search", Search);
+        AddQuery(query, "username", Username);
+        AddQuery(query, "currency", Currency);
+        AddQuery(query, "minRiskScore", MinRiskScore?.ToString());
+        AddQuery(query, "startDate", StartDate?.ToString("yyyy-MM-dd"));
+        AddQuery(query, "endDate", EndDate?.ToString("yyyy-MM-dd"));
+
+        if (includeChat && ChatTransactionId is not null)
+        {
+            AddQuery(query, "chatTransactionId", ChatTransactionId.Value.ToString());
+        }
+
+        return $"/admin/ai-detection?{string.Join("&", query)}";
+    }
+
+    private int NormalizedPageSize => PageSize == 100 ? 100 : 50;
+
+    private static void AddQuery(List<string> query, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            query.Add($"{Uri.EscapeDataString(key)}={Uri.EscapeDataString(value)}");
+        }
+    }
+
+    private static string DisplayAiText(string? value)
+    {
+        return value ?? string.Empty;
+    }
+}

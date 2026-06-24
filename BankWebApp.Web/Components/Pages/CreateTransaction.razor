@@ -255,13 +255,13 @@ else
     private string transactionDescription = string.Empty;
 
     [SupplyParameterFromQuery]
-    private string? Error { get; set; }
+    public string? Error { get; set; }
 
     [SupplyParameterFromQuery]
-    private string? Success { get; set; }
+    public string? Success { get; set; }
 
     [SupplyParameterFromQuery]
-    private long? TransactionId { get; set; }
+    public long? TransactionId { get; set; }
 
     [SupplyParameterFromQuery(Name = "type")]
     private string? TransferType { get; set; }

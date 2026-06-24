@@ -1,0 +1,298 @@
+@page "/admin/suspicious-detection-report"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+
+<PageTitle>Админ - Suspicious detection тайлан</PageTitle>
+
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h1>Suspicious detection тайлан</h1>
+        <div class="text-muted small">Илэрсэн сэжигтэй гүйлгээ, score, rule, review status болон хугацааны хяналтын тайлан.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+</div>
+
+@if (isLoading)
+{
+    <p><em>Уншиж байна...</em></p>
+}
+else
+{
+    <form class="row g-2 mb-3" method="get" action="/admin/suspicious-detection-report">
+        <div class="col-12 col-md-2">
+            <label class="form-label" for="startDate">Эхлэх огноо</label>
+            <input id="startDate" class="form-control" type="date" name="startDate" value="@StartDateValue" />
+        </div>
+        <div class="col-12 col-md-2">
+            <label class="form-label" for="endDate">Дуусах огноо</label>
+            <input id="endDate" class="form-control" type="date" name="endDate" value="@EndDateValue" />
+        </div>
+        <div class="col-12 col-md-2">
+            <label class="form-label" for="reviewStatus">Review төлөв</label>
+            <select id="reviewStatus" class="form-select" name="reviewStatus">
+                <option value="">Бүх төлөв</option>
+                @foreach (var status in ReviewStatusHelper.AllowedStatuses)
+                {
+                    <option value="@status" selected="@(ReviewStatus == status)">@ReviewStatusHelper.GetLabel(status)</option>
+                }
+            </select>
+        </div>
+        <div class="col-12 col-md-3">
+            <label class="form-label" for="search">Хайх</label>
+            <input id="search" class="form-control" name="search" value="@Search" placeholder="Данс, rule, шалтгаан, гүйлгээний утга..." />
+        </div>
+        <div class="col-12 col-md-1 d-flex align-items-end">
+            <div class="form-check mb-2">
+                <input id="suspiciousOnly" class="form-check-input" type="checkbox" name="suspiciousOnly" value="true" checked="@SuspiciousOnly" />
+                <label class="form-check-label" for="suspiciousOnly">Зөвхөн сэжигтэй</label>
+            </div>
+        </div>
+        <div class="col-12 col-md-2 d-flex align-items-end gap-2">
+            <button class="btn btn-outline-primary" type="submit">Хайх</button>
+            <a class="btn btn-outline-secondary" href="/admin/suspicious-detection-report">Цэвэрлэх</a>
+        </div>
+    </form>
+
+    <div class="row g-3 mb-4">
+        <SummaryCard Title="Нийт шалгалт" Value="@report.Summary.TotalChecks.ToString("N0")" />
+        <SummaryCard Title="Сэжигтэй" Value="@report.Summary.SuspiciousCount.ToString("N0")" />
+        <SummaryCard Title="Хэвийн" Value="@report.Summary.NormalCount.ToString("N0")" />
+        <SummaryCard Title="Service unavailable" Value="@report.Summary.UnavailableCount.ToString("N0")" />
+        <SummaryCard Title="Дундаж score" Value="@report.Summary.AverageRiskScore.ToString("N2")" />
+        <SummaryCard Title="Хамгийн өндөр score" Value="@report.Summary.MaxRiskScore.ToString("N2")" />
+        <SummaryCard Title="Pending review" Value="@report.Summary.PendingReviewCount.ToString("N0")" />
+        <SummaryCard Title="Review хийгдсэн" Value="@report.Summary.ReviewedCount.ToString("N0")" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-xl-4">
+            <LineChart Title="Сэжигтэй илрэл"
+                       Subtitle="Өдөр бүрийн suspicious transaction count"
+                       Unit="ш"
+                       Items="@report.DailySuspiciousTrend" />
+        </div>
+        <div class="col-12 col-xl-4">
+            <DonutChart Title="Review status"
+                        Subtitle="Сэжигтэй илэрсэн гүйлгээний review төлөв"
+                        Unit="ш"
+                        Items="@report.ReviewStatusChart" />
+        </div>
+        <div class="col-12 col-xl-4">
+            <BarChart Title="Rule breakdown"
+                      Subtitle="Хамгийн олон trigger болсон rule"
+                      Unit="ш"
+                      Items="@RuleBreakdownChart" />
+        </div>
+    </div>
+
+    <div class="mb-3 text-muted small">
+        Тайлангийн хугацаа: @report.Summary.StartDate.ToString("yyyy-MM-dd") - @report.Summary.EndDate.ToString("yyyy-MM-dd")
+    </div>
+}
+
+@if (!isLoading && report.Logs.Items.Count == 0)
+{
+    <div class="alert alert-light border">Сонгосон нөхцөлд detection log олдсонгүй.</div>
+}
+else if (!isLoading)
+{
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Detection огноо</th>
+                    <th>Гүйлгээ</th>
+                    <th>Дүн</th>
+                    <th>Score</th>
+                    <th>Rule</th>
+                    <th>Шалтгаан</th>
+                    <th>Review</th>
+                    <th>Status</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in report.Logs.Items)
+                {
+                    <tr>
+                        <td>
+                            <div>@item.DetectionAt.ToString("yyyy-MM-dd HH:mm")</div>
+                            <div class="small text-muted">Гүйлгээ: @item.TransactionAt.ToString("yyyy-MM-dd HH:mm")</div>
+                        </td>
+                        <td>
+                            <div>#@item.TransactionId</div>
+                            <div class="small text-muted">@item.FromAccountNumber → @item.ToAccountNumber</div>
+                        </td>
+                        <td>
+                            <div>@item.Amount.ToString("N2") @item.SourceCurrency</div>
+                            <div class="small text-muted">@item.CreditedAmount.ToString("N2") @item.TargetCurrency</div>
+                        </td>
+                        <td>
+                            @if (item.RiskScore is null)
+                            {
+                                <span>-</span>
+                            }
+                            else
+                            {
+                                <span class="@GetRiskBadgeClass(item.RiskScore.Value)">@item.RiskScore.Value.ToString("N2")</span>
+                            }
+                        </td>
+                        <td>
+                            @if (item.TriggeredRules.Count == 0)
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                            else
+                            {
+                                @foreach (var rule in item.TriggeredRules)
+                                {
+                                    <span class="badge text-bg-light border me-1 mb-1">@rule</span>
+                                }
+                            }
+                        </td>
+                        <td style="max-width: 360px;">@item.Reason</td>
+                        <td>@item.ReviewStatusLabel</td>
+                        <td>
+                            <span class="badge @(item.IsSuspicious == true ? "text-bg-danger" : "text-bg-secondary")">@DisplayServiceStatus(item)</span>
+                        </td>
+                        <td class="text-end">
+                            @if (item.IsSuspicious == true)
+                            {
+                                <a class="btn btn-sm btn-outline-primary" href="/admin/suspicious-transactions/@item.TransactionId">Дэлгэрэнгүй</a>
+                            }
+                            else
+                            {
+                                <a class="btn btn-sm btn-outline-secondary" href="@($"/admin/transactions?search={item.TransactionId}")">Гүйлгээ харах</a>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (report.Logs.TotalPages > 1)
+    {
+        <nav class="d-flex align-items-center gap-2 mt-3" aria-label="Suspicious detection report pagination">
+            <a class="btn btn-sm btn-outline-secondary @(report.Logs.Page <= 1 ? "disabled" : "")" href="@BuildHref(report.Logs.Page - 1)">Өмнөх</a>
+            <span class="small text-muted">@report.Logs.Page / @report.Logs.TotalPages</span>
+            <a class="btn btn-sm btn-outline-secondary @(report.Logs.Page >= report.Logs.TotalPages ? "disabled" : "")" href="@BuildHref(report.Logs.Page + 1)">Дараах</a>
+        </nav>
+    }
+}
+
+@code {
+    private AdminSuspiciousDetectionReportDto report = new();
+    private bool isLoading = true;
+    private DateOnly effectiveStartDate;
+    private DateOnly effectiveEndDate;
+
+    [SupplyParameterFromQuery]
+    public string? Search { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? StartDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? EndDate { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? ReviewStatus { get; set; }
+
+    [SupplyParameterFromQuery]
+    public bool SuspiciousOnly { get; set; }
+
+    [SupplyParameterFromQuery]
+    public int Page { get; set; } = 1;
+
+    private string StartDateValue => effectiveStartDate.ToString("yyyy-MM-dd");
+
+    private string EndDateValue => effectiveEndDate.ToString("yyyy-MM-dd");
+
+    protected override async Task OnInitializedAsync()
+    {
+        var today = MongoliaClock.Today;
+        effectiveStartDate = TryParseDate(StartDate) ?? today.AddDays(-6);
+        effectiveEndDate = TryParseDate(EndDate) ?? today;
+
+        report = await AdminService.GetSuspiciousDetectionReportAsync(
+            effectiveStartDate,
+            effectiveEndDate,
+            Search,
+            ReviewStatus,
+            SuspiciousOnly,
+            Page);
+
+        effectiveStartDate = report.Summary.StartDate;
+        effectiveEndDate = report.Summary.EndDate;
+        isLoading = false;
+    }
+
+    private string BuildHref(int page)
+    {
+        var query = new List<string>
+        {
+            $"page={page}",
+            $"startDate={Uri.EscapeDataString(StartDateValue)}",
+            $"endDate={Uri.EscapeDataString(EndDateValue)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            query.Add($"search={Uri.EscapeDataString(Search)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ReviewStatus))
+        {
+            query.Add($"reviewStatus={Uri.EscapeDataString(ReviewStatus)}");
+        }
+
+        if (SuspiciousOnly)
+        {
+            query.Add("suspiciousOnly=true");
+        }
+
+        return $"/admin/suspicious-detection-report?{string.Join("&", query)}";
+    }
+
+    private IReadOnlyList<ChartDataPoint> RuleBreakdownChart => report.RuleSummaries
+        .Select((rule, index) => new ChartDataPoint
+        {
+            Label = rule.RuleCode,
+            Value = rule.HitCount,
+            Color = ChartColors[index % ChartColors.Length]
+        })
+        .ToList();
+
+    private static DateOnly? TryParseDate(string? value)
+    {
+        return DateOnly.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    private static string DisplayServiceStatus(AdminSuspiciousDetectionLogDto item)
+    {
+        if (!string.Equals(item.ServiceStatus, "CHECKED", StringComparison.OrdinalIgnoreCase))
+        {
+            return item.ServiceStatus;
+        }
+
+        return item.IsSuspicious == true ? "Сэжигтэй" : "Хэвийн";
+    }
+
+    private static string GetRiskBadgeClass(decimal riskScore)
+    {
+        return riskScore >= 80 ? "badge text-bg-danger"
+            : riskScore >= 60 ? "badge text-bg-warning"
+            : "badge text-bg-light border";
+    }
+
+    private static readonly string[] ChartColors =
+    [
+        "#dc2626",
+        "#f59e0b",
+        "#2563eb",
+        "#16a34a",
+        "#7c3aed",
+        "#0891b2"
+    ];
+}
