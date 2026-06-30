@@ -1,0 +1,171 @@
+@page "/profile"
+@using BankWebApp.Web.DTOs.Profile
+@using BankWebApp.Web.Services.Interfaces
+@inject ICurrentUserService CurrentUser
+@inject IProfileService ProfileService
+@inject NavigationManager Navigation
+
+<PageTitle>Хувийн мэдээлэл</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="profile-toast profile-toast-success" role="status">@Success</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="profile-toast profile-toast-error" role="alert">@Error</div>
+}
+
+@if (isLoading)
+{
+    <div class="profile-card profile-empty">Уншиж байна...</div>
+}
+else if (profile is null)
+{
+    <div class="profile-card profile-empty">Хувийн мэдээлэл олдсонгүй.</div>
+}
+else
+{
+    <section class="profile-hero">
+        <div class="profile-avatar" aria-hidden="true">@GetInitial(profile)</div>
+        <div>
+            <p class="profile-eyebrow">Миний бүртгэл</p>
+            <h3>Сайн байна уу, @DisplayName(profile)</h3>
+            <p>Сүүлд нэвтэрсэн огноо: <strong>@FormatDate(profile.LastLoginAt)</strong></p>
+        </div>
+    </section>
+
+    <form method="post" action="/profile/update" class="profile-grid">
+        <input type="hidden" name="ReturnUrl" value="/profile" />
+
+        <section class="profile-card profile-primary">
+            <div class="profile-card-header">
+                <div>
+                    <h2>Хувийн мэдээлэл</h2>
+                    <p>Нэвтрэх нэр, холбоо барих мэдээллээ шинэчилнэ.</p>
+                </div>
+            </div>
+
+            <label class="profile-field">
+                <span>Нэвтрэх нэр</span>
+                <input name="Username" value="@profile.Username" autocomplete="username" required minlength="3" />
+            </label>
+
+            <label class="profile-field">
+                <span>И-мэйл хаяг</span>
+                <input name="Email" value="@profile.Email" type="email" autocomplete="email" required />
+            </label>
+
+            <label class="profile-field">
+                <span>Гар утас</span>
+                <input name="PhoneNumber" value="@profile.PhoneNumber" autocomplete="tel" required />
+            </label>
+
+            <label class="profile-field">
+                <span>Яаралтай холбоо барих утас</span>
+                <input name="EmergencyPhoneNumber" value="@profile.EmergencyPhoneNumber" autocomplete="tel" />
+            </label>
+        </section>
+
+        <section class="profile-card">
+            <div class="profile-card-header">
+                <div>
+                    <h2>Нууцлалын тохиргоо</h2>
+                    <p>Нууц үгээ солихгүй бол энэ хэсгийг хоосон үлдээнэ.</p>
+                </div>
+            </div>
+
+            <label class="profile-field">
+                <span>Одоогийн нууц үг</span>
+                <input name="CurrentPassword" type="password" autocomplete="current-password" />
+            </label>
+
+            <label class="profile-field">
+                <span>Шинэ нууц үг</span>
+                <input name="NewPassword" type="password" autocomplete="new-password" />
+            </label>
+
+            <label class="profile-field">
+                <span>Шинэ нууц үг давтах</span>
+                <input name="ConfirmPassword" type="password" autocomplete="new-password" />
+            </label>
+
+            <div class="profile-security-note">
+                Нууц үг солих үед одоогийн нууц үгийг заавал баталгаажуулна.
+            </div>
+        </section>
+
+        <section class="profile-card profile-info">
+            <h2>Бүртгэлийн мэдээлэл</h2>
+            <dl>
+                <div>
+                    <dt>Эрх</dt>
+                    <dd>@RoleLabel(profile.Role)</dd>
+                </div>
+                <div>
+                    <dt>Нууц үг шинэчилсэн</dt>
+                    <dd>@FormatDate(profile.PasswordChangedAt)</dd>
+                </div>
+                <div>
+                    <dt>Сүүлд нэвтэрсэн</dt>
+                    <dd>@FormatDate(profile.LastLoginAt)</dd>
+                </div>
+            </dl>
+        </section>
+
+        <div class="profile-actions">
+            <a class="profile-secondary-button" href="@BackHref">Буцах</a>
+            <button class="profile-primary-button" type="submit">Хадгалах</button>
+        </div>
+    </form>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "success")]
+    public string? Success { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+
+    private UserProfileDto? profile;
+    private bool isLoading = true;
+
+    private string BackHref => string.Equals(profile?.Role, "ADMIN", StringComparison.OrdinalIgnoreCase)
+        ? "/admin/dashboard"
+        : "/dashboard";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (CurrentUser.UserId is null)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        profile = await ProfileService.GetProfileAsync(CurrentUser.UserId.Value);
+        isLoading = false;
+    }
+
+    private static string DisplayName(UserProfileDto item)
+    {
+        var name = $"{item.FirstName} {item.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(name) ? item.Username : name;
+    }
+
+    private static string GetInitial(UserProfileDto item)
+    {
+        var name = DisplayName(item);
+        return string.IsNullOrWhiteSpace(name) ? "U" : name[..1].ToUpperInvariant();
+    }
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("yyyy-MM-dd HH:mm") : "Бүртгэлгүй";
+    }
+
+    private static string RoleLabel(string role)
+    {
+        return string.Equals(role, "ADMIN", StringComparison.OrdinalIgnoreCase) ? "Админ" : "Хэрэглэгч";
+    }
+}

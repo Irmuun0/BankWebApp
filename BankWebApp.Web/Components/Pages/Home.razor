@@ -1,55 +1,289 @@
 @page "/"
 @attribute [AllowAnonymous]
 
-<PageTitle>Нэвтрэх</PageTitle>
+<PageTitle>Phoebe bank</PageTitle>
 
-<div class="min-vh-100 d-flex flex-column align-items-center justify-content-center position-relative px-3 py-5">
-    <div class="border rounded p-4" style="width: 100%; max-width: 420px;">
-        <h1 class="h3 mb-4 text-center">Хэрэглэгч нэвтрэх</h1>
+<div class="phoebe-home">
+    <header class="phoebe-site-header">
+        <a class="phoebe-brand phoebe-brand--wordmark" href="/" aria-label="Phoebe bank нүүр">
+            <img src="/images/brand/phoebe-logo-sidebar.png" alt="Phoebe bank" />
+        </a>
 
-        @if (!string.IsNullOrWhiteSpace(Error))
-        {
-            <div class="alert alert-danger" role="alert">@Error</div>
-        }
+        <nav class="phoebe-main-nav" aria-label="Нүүр хуудасны цэс">
+            <a href="#products">Бүтээгдэхүүн</a>
+            <a href="#rates">Ханш</a>
+            <a href="#security">Аюулгүй байдал</a>
+            <a href="#support">Тусламж</a>
+        </nav>
 
-        <form method="post" action="/auth/login">
-            <input type="hidden" name="ReturnUrl" value="@ReturnUrlOrDashboard" />
-            <input type="hidden" name="RequiredRole" value="USER" />
-            <input type="hidden" name="LoginPath" value="/" />
+        <div class="phoebe-header-actions">
+            <button class="phoebe-admin-link" type="button" data-login-open="admin">Admin</button>
+            <button class="phoebe-login-button" type="button" data-login-open="user">Нэвтрэх</button>
+        </div>
+    </header>
 
-            <div class="mb-3">
-                <label class="form-label" for="usernameOrEmail">Хэрэглэгчийн нэр эсвэл имэйл</label>
-                <input class="form-control" id="usernameOrEmail" name="UsernameOrEmail" autocomplete="username" />
+    <section class="phoebe-hero">
+        <div class="phoebe-hero-copy">
+            <h2>Өдөр тутмын санхүүгээ ухаалгаар удирд</h2>
+            <p>
+                Phoebe bank нь данс, шилжүүлэг, валютын ханш болон AI эрсдэлийн хяналтыг нэг дор төвлөрүүлсэн
+                найдвартай дижитал банкны систем.
+            </p>
+
+            <div class="phoebe-hero-actions">
+                <button class="phoebe-primary-cta" type="button" data-login-open="user">Интернет банк руу нэвтрэх</button>
+                <a class="phoebe-secondary-cta" href="#security">Аюулгүй байдлыг харах</a>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label" for="password">Нууц үг</label>
-                <div class="input-group">
-                    <input class="form-control" id="password" name="Password" type="password" autocomplete="current-password" />
-                    <button class="btn btn-outline-secondary" type="button" aria-label="Нууц үг харах" onclick="togglePasswordVisibility('password')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                            <circle cx="12" cy="12" r="3" />
-                        </svg>
-                    </button>
+            <div class="phoebe-proof-row" aria-label="Phoebe bank давуу тал">
+                <div>
+                    <strong>24/7</strong>
+                    <span>Веб банк</span>
+                </div>
+                <div>
+                    <strong>AI</strong>
+                    <span>Эрсдэлийн хяналт</span>
+                </div>
+                <div>
+                    <strong>MNT / USD</strong>
+                    <span>Ханшийн хөрвүүлэлт</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="phoebe-hero-panel" aria-label="Банкны dashboard preview">
+            <div class="phoebe-panel-top">
+                <div>
+                    <span>Үндсэн данс</span>
+                    <strong>788,791.64 MNT</strong>
+                </div>
+                <span class="phoebe-status-dot">Идэвхтэй</span>
+            </div>
+
+            <div class="phoebe-balance-grid">
+                <div>
+                    <span>USD үлдэгдэл</span>
+                    <strong>3,215.65</strong>
+                </div>
+                <div>
+                    <span>Өдрийн лимит</span>
+                    <strong>50,000,000 MNT</strong>
                 </div>
             </div>
 
-            <button class="btn btn-primary w-100" type="submit">Нэвтрэх</button>
+            <div class="phoebe-transfer-card">
+                <div class="phoebe-transfer-line">
+                    <span>AI шалгалт</span>
+                    <strong>Эрсдэл бага</strong>
+                </div>
+                <div class="phoebe-progress">
+                    <span style="width: 38%;"></span>
+                </div>
+            </div>
+
+            <div class="phoebe-rate-preview">
+                <div>
+                    <span>USD авах</span>
+                    <strong>3,567 MNT</strong>
+                </div>
+                <div>
+                    <span>USD зарах</span>
+                    <strong>3,578 MNT</strong>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="products" class="phoebe-section phoebe-product-section">
+        <div class="phoebe-section-heading">
+            <h2>Танд хэрэгтэй банкны үндсэн үйлчилгээнүүд</h2>
+            <p>Хэрэглэгч, админ, ханш, гүйлгээний хяналт бүгд нэг системд цэгцтэй ажиллана.</p>
+        </div>
+
+        <div class="phoebe-feature-grid">
+            <article>
+                <span class="phoebe-feature-icon">↔</span>
+                <h3>Данс ба шилжүүлэг</h3>
+                <p>Өөрийн данс хооронд болон бусдын данс руу хурдан шилжүүлэг хийх, дансны төлөв удирдах.</p>
+            </article>
+            <article>
+                <span class="phoebe-feature-icon">$</span>
+                <h3>Валютын ханш</h3>
+                <p>Монголбанкны ханш, банкны авах/зарах ханш, ханшийн зөрүүний орлогын тайлан.</p>
+            </article>
+            <article>
+                <span class="phoebe-feature-icon">AI</span>
+                <h3>AI хамгаалалт</h3>
+                <p>Rule-based detection болон Gemini AI шинжилгээгээр сэжигтэй гүйлгээг админ хянах боломжтой.</p>
+            </article>
+        </div>
+    </section>
+
+    <section id="rates" class="phoebe-section phoebe-rates-section">
+        <div class="phoebe-rates-copy">
+            <h2>Ханшийн мэдээлэл</h2>
+            <p>Нүүр хуудасны ханш нь мэдээллийн зориулалттай. Илүү дэлгэрэнгүй мэдээллийг floating ханшийн widget-ээс харж болно.</p>
+        </div>
+        <div class="phoebe-rates-board">
+            <MongolBankRateCards />
+        </div>
+    </section>
+
+    <section id="security" class="phoebe-section phoebe-security-section">
+        <div>
+            <h2>Аюулгүй байдлыг системийн түвшинд бодсон</h2>
+            <p>
+                Нэвтрэлтийн lock, security event log, audit trail, гүйлгээний лимит, сэжигтэй гүйлгээний workflow нь
+                банкны web system-ийн үндсэн хамгаалалтын давхаргуудыг бүрдүүлнэ.
+            </p>
+        </div>
+        <div class="phoebe-security-list">
+            <div><strong>01</strong><span>Өдрийн гүйлгээний лимит</span></div>
+            <div><strong>02</strong><span>Audit log ба admin action tracking</span></div>
+            <div><strong>03</strong><span>AI detection ба review workflow</span></div>
+        </div>
+    </section>
+
+    <section id="support" class="phoebe-footer-cta">
+        <img src="/images/brand/phoebe-logo-emblem.png" alt="" />
+        <div>
+            <h2>Phoebe bank-д тавтай морил</h2>
+            <p>Системд нэвтэрч өөрийн данс, гүйлгээ, мэдэгдэл болон ханшийн мэдээллээ удирдаарай.</p>
+        </div>
+        <button class="phoebe-primary-cta" type="button" data-login-open="user">Нэвтрэх</button>
+    </section>
+</div>
+
+<div class="phoebe-login-modal" id="phoebe-login-modal" aria-hidden="true">
+    <div class="phoebe-login-backdrop" data-login-close></div>
+    <div class="phoebe-login-dialog" role="dialog" aria-modal="true" aria-labelledby="phoebe-login-title">
+        <button class="phoebe-login-close" type="button" data-login-close aria-label="Хаах">×</button>
+        <img class="phoebe-login-logo" src="/images/brand/phoebe-logo-login.png" alt="Phoebe bank" />
+
+        @if (!string.IsNullOrWhiteSpace(Error))
+        {
+            <div class="phoebe-login-error" role="alert">@Error</div>
+        }
+
+        <div class="phoebe-login-tabs" role="tablist" aria-label="Нэвтрэх төрөл">
+            <button class="is-active" type="button" data-login-tab="user" role="tab">Хэрэглэгч</button>
+            <button type="button" data-login-tab="admin" role="tab">Админ</button>
+        </div>
+
+        <form class="phoebe-login-form is-active" method="post" action="/auth/login" data-login-panel="user">
+            <h4 id="phoebe-login-title">Хэрэглэгч нэвтрэх</h4>
+            <input type="hidden" name="ReturnUrl" value="@ReturnUrlOrDashboard" />
+            <input type="hidden" name="RequiredRole" value="USER" />
+            <input type="hidden" name="LoginPath" value="/?login=user" />
+
+            <label for="homeUsernameOrEmail">Хэрэглэгчийн нэр эсвэл имэйл</label>
+            <input id="homeUsernameOrEmail" name="UsernameOrEmail" autocomplete="username" />
+
+            <label for="homePassword">Нууц үг</label>
+            <div class="phoebe-password-field">
+                <input id="homePassword" name="Password" type="password" autocomplete="current-password" />
+                <button type="button" data-password-toggle="homePassword" aria-label="Нууц үг харах">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </button>
+            </div>
+
+            <button class="phoebe-login-submit" type="submit">Нэвтрэх</button>
+        </form>
+
+        <form class="phoebe-login-form" method="post" action="/auth/login" data-login-panel="admin">
+            <h2>Админ нэвтрэх</h2>
+            <input type="hidden" name="ReturnUrl" value="@ReturnUrlOrAdminDashboard" />
+            <input type="hidden" name="RequiredRole" value="ADMIN" />
+            <input type="hidden" name="LoginPath" value="/?login=admin" />
+
+            <label for="homeAdminUsernameOrEmail">Admin нэр эсвэл имэйл</label>
+            <input id="homeAdminUsernameOrEmail" name="UsernameOrEmail" autocomplete="username" />
+
+            <label for="homeAdminPassword">Нууц үг</label>
+            <div class="phoebe-password-field">
+                <input id="homeAdminPassword" name="Password" type="password" autocomplete="current-password" />
+                <button type="button" data-password-toggle="homeAdminPassword" aria-label="Нууц үг харах">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </button>
+            </div>
+
+            <button class="phoebe-login-submit" type="submit">Admin нэвтрэх</button>
         </form>
     </div>
-
-    <MongolBankRateCards />
-
-    <a class="btn btn-outline-secondary position-absolute bottom-0 start-0 m-4" href="/admin/login">Admin нэвтрэх</a>
 </div>
 
 <script>
-    function togglePasswordVisibility(inputId) {
-        const input = document.getElementById(inputId);
-        if (!input) return;
-        input.type = input.type === 'password' ? 'text' : 'password';
-    }
+    (() => {
+        const modal = document.getElementById('phoebe-login-modal');
+        if (!modal) return;
+
+        const tabs = [...modal.querySelectorAll('[data-login-tab]')];
+        const panels = [...modal.querySelectorAll('[data-login-panel]')];
+        const focusFirstField = (mode) => {
+            const panel = modal.querySelector(`[data-login-panel="${mode}"]`);
+            const input = panel?.querySelector('input[name="UsernameOrEmail"]');
+            setTimeout(() => input?.focus(), 60);
+        };
+
+        const setMode = (mode) => {
+            const nextMode = mode === 'admin' ? 'admin' : 'user';
+            tabs.forEach(tab => tab.classList.toggle('is-active', tab.dataset.loginTab === nextMode));
+            panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.loginPanel === nextMode));
+            focusFirstField(nextMode);
+        };
+
+        const openModal = (mode) => {
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('phoebe-modal-open');
+            setMode(mode);
+        };
+
+        const closeModal = () => {
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('phoebe-modal-open');
+        };
+
+        document.querySelectorAll('[data-login-open]').forEach(button => {
+            button.addEventListener('click', () => openModal(button.dataset.loginOpen));
+        });
+
+        modal.querySelectorAll('[data-login-close]').forEach(button => {
+            button.addEventListener('click', closeModal);
+        });
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => setMode(tab.dataset.loginTab));
+        });
+
+        modal.querySelectorAll('[data-password-toggle]').forEach(button => {
+            button.addEventListener('click', () => {
+                const input = document.getElementById(button.dataset.passwordToggle);
+                if (!input) return;
+                input.type = input.type === 'password' ? 'text' : 'password';
+            });
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+                closeModal();
+            }
+        });
+
+        const query = new URLSearchParams(window.location.search);
+        const loginMode = query.get('login');
+        const hasError = query.has('error');
+        if (loginMode || hasError) {
+            openModal(loginMode === 'admin' ? 'admin' : 'user');
+        }
+    })();
 </script>
 
 @code {
@@ -59,5 +293,10 @@
     [SupplyParameterFromQuery]
     public string? ReturnUrl { get; set; }
 
+    [SupplyParameterFromQuery(Name = "login")]
+    public string? LoginMode { get; set; }
+
     private string ReturnUrlOrDashboard => string.IsNullOrWhiteSpace(ReturnUrl) ? "/dashboard" : ReturnUrl;
+
+    private string ReturnUrlOrAdminDashboard => string.IsNullOrWhiteSpace(ReturnUrl) ? "/admin/dashboard" : ReturnUrl;
 }

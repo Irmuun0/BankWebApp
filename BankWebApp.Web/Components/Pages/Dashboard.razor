@@ -1,12 +1,11 @@
 @page "/dashboard"
 @attribute [Authorize(Roles = "USER,ADMIN")]
+@rendermode InteractiveServer
 @inject ICurrentUserService CurrentUser
 @inject IAccountService AccountService
 @inject ITransactionService TransactionService
 
 <PageTitle>Хэрэглэгчийн самбар</PageTitle>
-
-<h1>Хэрэглэгчийн самбар</h1>
 
 @if (isLoading)
 {
@@ -18,25 +17,27 @@ else if (!string.IsNullOrWhiteSpace(errorMessage))
 }
 else
 {
-    <p>Сайн байна уу, @DisplayName.</p>
+    <p class="dashboard-greeting">Сайн байна уу, @DisplayName.</p>
 
     @if (selectedAccount is not null)
     {
-        <form class="border rounded p-3 mb-4" method="get" action="/dashboard">
-            <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-5">
+        <form class="dashboard-account-picker mb-4" method="get" action="/dashboard">
+            <div class="dashboard-account-picker-grid">
+                <div class="dashboard-account-field">
                     <label class="form-label" for="accountId">Харах данс</label>
-                    <select class="form-select" id="accountId" name="accountId">
+                    <div class="dashboard-select-shell">
+                        <select class="form-select dashboard-account-select" id="accountId" name="accountId">
                         @foreach (var account in allAccounts)
                         {
                             <option value="@account.Id" selected="@(account.Id == selectedAccount.Id)">
                                 @account.AccountNumber - @DisplayAccountType(account.AccountType)/@account.Currency (@FormatMoney(account.Balance))
                             </option>
                         }
-                    </select>
+                        </select>
+                    </div>
                 </div>
-                <div class="col-12 col-lg-auto">
-                    <button class="btn btn-outline-primary" type="submit">Сонгох</button>
+                <div class="dashboard-account-action">
+                    <button class="dashboard-select-button" type="submit">Сонгох</button>
                 </div>
             </div>
         </form>
@@ -70,22 +71,17 @@ else
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-12 col-xl-6">
+        <div class="col-12 col-xl-8">
             <BarChart Title="Дансны үлдэгдэл"
                       Subtitle="Валют бүрээр нэгтгэсэн үлдэгдэл"
                       Items="@BalanceByCurrencyChart" />
         </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <DonutChart Title="Дансны төлөв"
-                        Subtitle="Идэвхтэй болон идэвхгүй данс"
-                        Unit="данс"
-                        Items="@AccountStatusChart" />
-        </div>
-        <div class="col-12 col-md-6 col-xl-3">
-            <DonutChart Title="Гүйлгээний чиглэл"
-                        Subtitle="Сонгосон дансны сүүлийн гүйлгээнүүд"
-                        Unit="ш"
-                        Items="@TransactionDirectionChart" />
+        <div class="col-12 col-xl-4">
+            <IncomeExpenseDonutChart Title="Орлого / зарлага"
+                                     Subtitle="Сүүлийн 1 сарын сонгосон дансны мөнгөн урсгал"
+                                     Income="@MonthlyIncome"
+                                     Expense="@MonthlyExpense"
+                                     Currency="@(selectedAccount?.Currency ?? string.Empty)" />
         </div>
         <div class="col-12">
             <LineChart Title="Сүүлийн 7 өдрийн гүйлгээ"
@@ -95,24 +91,8 @@ else
         </div>
     </div>
 
-    <div class="mb-4 d-flex align-items-start gap-2">
-        <a class="btn btn-primary" href="/accounts">Миний дансууд</a>
-        <nav class="transfer-hover-nav" aria-label="Гүйлгээ хийх сонголт">
-            <menu>
-                <menuitem>
-                    <a href="/transactions/create">Гүйлгээ хийх</a>
-                    <menu>
-                        <menuitem><a href="/transactions/create?type=own">Өөрийн данс хооронд</a></menuitem>
-                        <menuitem><a href="/transactions/create?type=other">Бусдын данс руу</a></menuitem>
-                    </menu>
-                </menuitem>
-            </menu>
-        </nav>
-        <a class="btn btn-outline-primary" href="@TransactionsHref">Гүйлгээний түүх</a>
-    </div>
-
-    <h2 class="h5">Сүүлийн данснууд</h2>
-    @if (recentAccounts.Count == 0)
+    <h2 class="h5">Миний данснууд</h2>
+    @if (allAccounts.Count == 0)
     {
         <p>Танд одоогоор данс байхгүй байна.</p>
     }
@@ -128,7 +108,7 @@ else
                 </tr>
             </thead>
             <tbody>
-                @foreach (var account in recentAccounts)
+                @foreach (var account in allAccounts)
                 {
                     <tr>
                         <td>
@@ -196,18 +176,14 @@ else
 
     private BankWebApp.Web.DTOs.Accounts.AccountSummaryDto summary = new();
     private List<BankWebApp.Web.DTOs.Accounts.AccountDto> allAccounts = [];
-    private List<BankWebApp.Web.DTOs.Accounts.AccountDto> recentAccounts = [];
     private List<BankWebApp.Web.DTOs.Transactions.UserTransactionDto> recentTransactions = [];
+    private List<BankWebApp.Web.DTOs.Transactions.UserTransactionDto> monthlyTransactions = [];
     private BankWebApp.Web.DTOs.Accounts.AccountDto? selectedAccount;
     private BankWebApp.Web.DTOs.Transactions.TransactionReceiptDto? selectedReceipt;
     private bool isLoading = true;
     private string? errorMessage;
 
     private string DisplayName => CurrentUser.FullName ?? CurrentUser.Username ?? "хэрэглэгч";
-
-    private string TransactionsHref => selectedAccount is null
-        ? "/transactions"
-        : $"/transactions?accountId={selectedAccount.Id}";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -221,12 +197,19 @@ else
 
         summary = await AccountService.GetMyAccountSummaryAsync(userId.Value);
         allAccounts = await AccountService.GetMyAccountsAsync(userId.Value);
-        recentAccounts = allAccounts.Take(3).ToList();
         selectedAccount = ResolveSelectedAccount();
+        recentTransactions = [];
+        monthlyTransactions = [];
 
         if (selectedAccount is not null)
         {
             recentTransactions = await TransactionService.GetRecentMyTransactionsAsync(userId.Value, selectedAccount.Id);
+            var today = MongoliaClock.Today;
+            monthlyTransactions = await TransactionService.GetMyTransactionsAsync(
+                userId.Value,
+                selectedAccount.Id,
+                today.AddMonths(-1),
+                today);
         }
 
         if (DetailTransactionId is not null)
@@ -295,17 +278,13 @@ else
         })
         .ToList();
 
-    private IReadOnlyList<ChartDataPoint> AccountStatusChart =>
-    [
-        new() { Label = "Идэвхтэй", Value = summary.ActiveAccountCount, Color = "#16a34a" },
-        new() { Label = "Идэвхгүй", Value = Math.Max(0, summary.TotalAccounts - summary.ActiveAccountCount), Color = "#94a3b8" }
-    ];
+    private decimal MonthlyIncome => monthlyTransactions
+        .Where(transaction => transaction.Direction != "SENT")
+        .Sum(transaction => transaction.CreditedAmount);
 
-    private IReadOnlyList<ChartDataPoint> TransactionDirectionChart =>
-    [
-        new() { Label = "Илгээсэн", Value = recentTransactions.Count(transaction => transaction.Direction == "SENT"), Color = "#dc2626" },
-        new() { Label = "Хүлээн авсан", Value = recentTransactions.Count(transaction => transaction.Direction != "SENT"), Color = "#2563eb" }
-    ];
+    private decimal MonthlyExpense => monthlyTransactions
+        .Where(transaction => transaction.Direction == "SENT")
+        .Sum(transaction => transaction.Amount);
 
     private IReadOnlyList<ChartDataPoint> RecentTransactionTrendChart
     {

@@ -1,3 +1,6 @@
+@using BlazorBootstrap
+@implements IAsyncDisposable
+
 <section class="chart-card">
     <div class="chart-card-header">
         <div>
@@ -5,6 +8,16 @@
             @if (!string.IsNullOrWhiteSpace(Subtitle))
             {
                 <p>@Subtitle</p>
+            }
+        </div>
+        <div class="chart-actions">
+            @if (!string.IsNullOrWhiteSpace(Unit))
+            {
+                <span class="chart-unit">@Unit</span>
+            }
+            @if (VisibleItems.Count > 0)
+            {
+                <button class="chart-expand-button" type="button" title="Томруулах" aria-label="Томруулах" @onclick="OpenExpandedChart">⤢</button>
             }
         </div>
     </div>
@@ -15,49 +28,144 @@
     }
     else
     {
-        <div class="bar-chart">
-            @foreach (var item in VisibleItems)
-            {
-                <div class="bar-chart-row">
-                    <div class="bar-chart-label">@item.Label</div>
-                    <div class="bar-chart-track" aria-label="@($"{item.Label}: {FormatValue(item.Value)}")">
-                        <div class="bar-chart-fill" style="@BuildFillStyle(item)"></div>
-                    </div>
-                    <div class="bar-chart-value">@FormatValue(item.Value)</div>
-                </div>
-            }
+        <div class="bb-chart-wrap">
+            <BlazorBootstrap.BarChart @ref="barChart" Width="520" Height="240" />
         </div>
     }
 </section>
 
+@if (isExpanded)
+{
+    <div class="chart-modal-backdrop" @onclick="CloseExpandedChart">
+        <div class="chart-modal" role="dialog" aria-modal="true" aria-label="@Title" @onclick:stopPropagation="true">
+            <div class="chart-modal-header">
+                <div>
+                    <h2>@Title</h2>
+                    @if (!string.IsNullOrWhiteSpace(Subtitle))
+                    {
+                        <p>@Subtitle</p>
+                    }
+                </div>
+                <button class="chart-modal-close" type="button" aria-label="Хаах" @onclick="CloseExpandedChart">×</button>
+            </div>
+            <div class="chart-modal-body">
+                <BlazorBootstrap.BarChart @ref="expandedBarChart" Width="1100" Height="520" />
+            </div>
+        </div>
+    </div>
+}
+
 @code {
-    [Parameter]
-    public string Title { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public IReadOnlyList<ChartDataPoint> Items { get; set; } = [];
 
-    [Parameter]
-    public string? Subtitle { get; set; }
+    private BlazorBootstrap.BarChart barChart = default!;
+    private BlazorBootstrap.BarChart expandedBarChart = default!;
+    private ChartData chartData = new();
+    private BarChartOptions chartOptions = new();
+    private bool chartInitialized;
+    private bool expandedChartInitialized;
+    private bool pendingChartRefresh = true;
+    private bool pendingExpandedChartRefresh;
+    private bool isExpanded;
 
-    [Parameter]
-    public string? Unit { get; set; }
+    private IReadOnlyList<ChartDataPoint> VisibleItems => Items.Where(item => item.Value > 0).ToList();
 
-    [Parameter]
-    public IReadOnlyList<ChartDataPoint> Items { get; set; } = [];
-
-    private IReadOnlyList<ChartDataPoint> VisibleItems => Items
-        .Where(item => item.Value > 0)
-        .ToList();
-
-    private decimal MaxValue => VisibleItems.Count == 0 ? 0 : VisibleItems.Max(item => item.Value);
-
-    private string BuildFillStyle(ChartDataPoint item)
+    protected override void OnParametersSet()
     {
-        var width = MaxValue <= 0 ? 0 : Math.Max(4, (double)(item.Value / MaxValue) * 100);
-        return $"width: {width:0.##}%; background: {item.Color};";
+        chartData = BuildChartData();
+        chartOptions = BuildChartOptions();
+        pendingChartRefresh = true;
+        pendingExpandedChartRefresh = isExpanded;
     }
 
-    private string FormatValue(decimal value)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        var formatted = value % 1 == 0 ? value.ToString("N0") : value.ToString("N2");
-        return string.IsNullOrWhiteSpace(Unit) ? formatted : $"{formatted} {Unit}";
+        if (VisibleItems.Count == 0)
+        {
+            return;
+        }
+
+        if (pendingChartRefresh)
+        {
+            if (!chartInitialized)
+            {
+                await barChart.InitializeAsync(chartData, chartOptions);
+                chartInitialized = true;
+            }
+            else
+            {
+                await barChart.UpdateAsync(chartData, chartOptions);
+            }
+
+            pendingChartRefresh = false;
+        }
+
+        if (isExpanded && pendingExpandedChartRefresh)
+        {
+            if (!expandedChartInitialized)
+            {
+                await expandedBarChart.InitializeAsync(chartData, chartOptions);
+                expandedChartInitialized = true;
+            }
+            else
+            {
+                await expandedBarChart.UpdateAsync(chartData, chartOptions);
+            }
+
+            pendingExpandedChartRefresh = false;
+        }
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    private ChartData BuildChartData()
+    {
+        return new ChartData
+        {
+            Labels = VisibleItems.Select(item => item.Label).ToList(),
+            Datasets =
+            [
+                new BarChartDataset
+                {
+                    Label = string.IsNullOrWhiteSpace(Unit) ? Title : $"{Title} ({Unit})",
+                    Data = VisibleItems.Select(item => (double?)item.Value).ToList(),
+                    BackgroundColor = VisibleItems.Select(item => item.Color).ToList(),
+                    BorderColor = VisibleItems.Select(item => item.Color).ToList(),
+                    BorderWidth = [1],
+                    BarPercentage = 0.38,
+                    CategoryPercentage = 0.58,
+                    MaxBarThickness = 34
+                }
+            ]
+        };
+    }
+
+    private static BarChartOptions BuildChartOptions()
+    {
+        var options = new BarChartOptions();
+        options.Responsive = true;
+        options.MaintainAspectRatio = false;
+        options.Layout!.AutoPadding = true;
+        options.Layout.Padding = 8;
+        options.Plugins!.Legend.Display = false;
+        options.Plugins.Title!.Display = false;
+        return options;
+    }
+
+    private void OpenExpandedChart()
+    {
+        isExpanded = true;
+        expandedChartInitialized = false;
+        pendingExpandedChartRefresh = true;
+    }
+
+    private void CloseExpandedChart()
+    {
+        isExpanded = false;
+        expandedChartInitialized = false;
+        pendingExpandedChartRefresh = false;
     }
 }

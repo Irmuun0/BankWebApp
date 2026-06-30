@@ -37,6 +37,32 @@ public class TransactionService : ITransactionService
 
     public async Task<List<UserTransactionDto>> GetMyTransactionsAsync(
         long currentUserId,
+        DateOnly? startDate,
+        DateOnly? endDate,
+        int count = 500,
+        CancellationToken cancellationToken = default)
+    {
+        var query = BuildMyTransactionsQuery(currentUserId, null);
+
+        if (startDate is not null)
+        {
+            var start = startDate.Value.ToDateTime(TimeOnly.MinValue);
+            query = query.Where(transaction => transaction.CreatedAt >= start);
+        }
+
+        if (endDate is not null)
+        {
+            var endExclusive = endDate.Value.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            query = query.Where(transaction => transaction.CreatedAt < endExclusive);
+        }
+
+        return await query
+            .Take(Math.Clamp(count, 1, 500))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<UserTransactionDto>> GetMyTransactionsAsync(
+        long currentUserId,
         long accountId,
         DateOnly? startDate,
         DateOnly? endDate,
@@ -119,6 +145,22 @@ public class TransactionService : ITransactionService
             {
                 await dbTransaction.RollbackAsync(cancellationToken);
                 return Failed("Илгээх идэвхтэй данс олдсонгүй.");
+            }
+
+            var debitAmountMnt = await ConvertDebitAmountToMntAsync(fromAccount.Currency, amount, cancellationToken);
+            if (!debitAmountMnt.Success)
+            {
+                await dbTransaction.RollbackAsync(cancellationToken);
+                return Failed(debitAmountMnt.ErrorMessage ?? "Өдрийн лимит шалгах ханш олдсонгүй.");
+            }
+
+            var todayDebitTotalMnt = await GetTodayDebitTotalMntAsync(fromAccount.Id, fromAccount.Currency, cancellationToken);
+            var projectedDailyTotalMnt = todayDebitTotalMnt + debitAmountMnt.AmountMnt;
+            if (projectedDailyTotalMnt > fromAccount.DailyTransactionLimitMnt)
+            {
+                await dbTransaction.RollbackAsync(cancellationToken);
+                var remainingLimit = Math.Max(0m, fromAccount.DailyTransactionLimitMnt - todayDebitTotalMnt);
+                return Failed($"Энэ дансны өдрийн гүйлгээний лимит {fromAccount.DailyTransactionLimitMnt:N2} MNT. Өнөөдөр ашигласан: {todayDebitTotalMnt:N2} MNT. Үлдсэн лимит: {remainingLimit:N2} MNT.");
             }
 
             var toAccount = await _dbContext.Accounts
@@ -691,6 +733,48 @@ public class TransactionService : ITransactionService
         var fxIncome = BuildFxIncomeLog(sourceCurrency, targetCurrency, amount, creditedAmount, quote);
 
         return (true, null, exchangeRate.Id, exchangeRate.Rate, creditedAmount, roundingDifference, fxIncome);
+    }
+
+    private async Task<decimal> GetTodayDebitTotalMntAsync(long accountId, string accountCurrency, CancellationToken cancellationToken)
+    {
+        var todayStart = MongoliaClock.Today.ToDateTime(TimeOnly.MinValue);
+        var tomorrowStart = todayStart.AddDays(1);
+
+        var todayDebitTotal = await _dbContext.Transactions
+            .AsNoTracking()
+            .Where(transaction =>
+                transaction.FromAccountId == accountId &&
+                transaction.Status == "SUCCESS" &&
+                transaction.CreatedAt >= todayStart &&
+                transaction.CreatedAt < tomorrowStart)
+            .SumAsync(transaction => (decimal?)transaction.Amount, cancellationToken) ?? 0m;
+
+        if (string.Equals(accountCurrency, "MNT", StringComparison.OrdinalIgnoreCase))
+        {
+            return todayDebitTotal;
+        }
+
+        var converted = await ConvertDebitAmountToMntAsync(accountCurrency, todayDebitTotal, cancellationToken);
+        return converted.AmountMnt;
+    }
+
+    private async Task<(bool Success, string? ErrorMessage, decimal AmountMnt)> ConvertDebitAmountToMntAsync(
+        string sourceCurrency,
+        decimal amount,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(sourceCurrency, "MNT", StringComparison.OrdinalIgnoreCase))
+        {
+            return (true, null, amount);
+        }
+
+        var exchangeRate = await _exchangeRateService.GetOrCreateLatestExchangeRateLogAsync(sourceCurrency, "MNT", cancellationToken);
+        if (exchangeRate is null)
+        {
+            return (false, $"{sourceCurrency}-MNT валютын ханш олдсонгүй.", 0m);
+        }
+
+        return (true, null, TruncateMoney(amount * exchangeRate.Rate));
     }
 
     private static FxIncomeLog? BuildFxIncomeLog(

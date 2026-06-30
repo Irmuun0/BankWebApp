@@ -7,6 +7,7 @@ public class AccountDto
     public string AccountType { get; set; } = string.Empty;
     public string Currency { get; set; } = string.Empty;
     public decimal Balance { get; set; }
+    public decimal DailyTransactionLimitMnt { get; set; }
     public bool IsActive { get; set; }
     public bool IsPrimary { get; set; }
     public DateTime CreatedAt { get; set; }

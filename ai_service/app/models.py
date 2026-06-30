@@ -1,6 +1,7 @@
 """FastAPI request/response model-ууд."""
 
 from decimal import Decimal
+from typing import Any
 from pydantic import BaseModel, Field
 
 
@@ -129,5 +130,39 @@ class GeminiChatRequest(BaseModel):
 
 class GeminiChatResponse(BaseModel):
     """Admin follow-up chat response."""
+
+    answer: str
+
+
+class UserFinanceChatRequest(BaseModel):
+    """Logged-in user finance chat request."""
+
+    question: str
+    context: dict[str, Any] = Field(default_factory=dict)
+    conversation: list["BankInfoChatMessage"] = Field(default_factory=list)
+
+
+class UserFinanceChatResponse(BaseModel):
+    """Logged-in user finance chat response."""
+
+    answer: str
+
+
+class BankInfoChatMessage(BaseModel):
+    """Public Chubi chat-ийн өмнөх богино ярианы мөр."""
+
+    role: str
+    content: str
+
+
+class BankInfoChatRequest(BaseModel):
+    """Нэвтрээгүй хэрэглэгчийн Phoebe Bank-ийн талаарх асуулт."""
+
+    question: str
+    conversation: list[BankInfoChatMessage] = Field(default_factory=list)
+
+
+class BankInfoChatResponse(BaseModel):
+    """Public Chubi chat-ийн хариу."""
 
     answer: str

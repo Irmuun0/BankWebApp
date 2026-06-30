@@ -7,7 +7,6 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1>Сэжигтэй гүйлгээ</h1>
-    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
 </div>
 
 @if (!string.IsNullOrWhiteSpace(Error))
@@ -91,12 +90,12 @@ else if (!isLoading)
 
 @if (selectedDetail is not null)
 {
-    <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1050;">
-        <a class="position-absolute top-0 start-0 w-100 h-100 d-block text-decoration-none"
+    <div class="suspicious-modal-shell">
+        <a class="suspicious-modal-backdrop"
            href="@CloseModalUrl"
-           style="background: rgba(15, 23, 42, 0.35); backdrop-filter: blur(7px);"></a>
+           aria-label="Хаах"></a>
 
-        <div class="position-relative bg-white border rounded shadow mx-auto my-4 p-4" style="max-width: 920px; max-height: calc(100vh - 3rem); overflow-y: auto;">
+        <div class="suspicious-modal-card">
             <div class="d-flex justify-content-between align-items-start mb-3">
                 <div>
                     <h2 class="h4 mb-1">Сэжигтэй гүйлгээ #@selectedDetail.TransactionId</h2>
@@ -109,9 +108,9 @@ else if (!isLoading)
                 <div class="col-12 col-lg-6">
                     <dl class="row mb-0">
                         <dt class="col-sm-5">Илгээгч</dt>
-                        <dd class="col-sm-7">@selectedDetail.FromAccountNumber</dd>
+                        <dd class="col-sm-7">@selectedDetail.FromAccountNumber <span class="text-muted small">/ @selectedDetail.FromUserName</span></dd>
                         <dt class="col-sm-5">Хүлээн авагч</dt>
-                        <dd class="col-sm-7">@selectedDetail.ToAccountNumber</dd>
+                        <dd class="col-sm-7">@selectedDetail.ToAccountNumber <span class="text-muted small">/ @selectedDetail.ToUserName</span></dd>
                         <dt class="col-sm-5">Гүйлгээний дүн</dt>
                         <dd class="col-sm-7">@selectedDetail.Amount.ToString("N2") @selectedDetail.SourceCurrency</dd>
                         <dt class="col-sm-5">Хүлээн авсан дүн</dt>
@@ -157,9 +156,48 @@ else if (!isLoading)
                 </div>
 
                 <div class="border rounded p-3 mb-3 bg-light">
+                    <div class="fw-semibold mb-2">Эрсдэлийн арга хэмжээ</div>
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                            <div class="small text-muted mb-2">Илгээгч: @selectedDetail.FromUserName / @selectedDetail.FromAccountNumber</div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="notifySender" name="NotifySender" value="true" />
+                                <label class="form-check-label" for="notifySender">Илгээгчид мэдэгдэл илгээх</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="deactivateSenderAccount" name="DeactivateSenderAccount" value="true" />
+                                <label class="form-check-label" for="deactivateSenderAccount">Илгээгчийн дансыг идэвхгүй болгох</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="deactivateSenderUser" name="DeactivateSenderUser" value="true" />
+                                <label class="form-check-label" for="deactivateSenderUser">Илгээгчийн нэвтрэх эрхийг идэвхгүй болгох</label>
+                            </div>
+                            <textarea class="form-control mt-2" name="SenderNotificationMessage" rows="2" placeholder="Илгээгчид илгээх мэдэгдлийн текст"></textarea>
+                        </div>
+
+                        <div class="col-12 col-lg-6">
+                            <div class="small text-muted mb-2">Хүлээн авагч: @selectedDetail.ToUserName / @selectedDetail.ToAccountNumber</div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="notifyReceiver" name="NotifyReceiver" value="true" />
+                                <label class="form-check-label" for="notifyReceiver">Хүлээн авагчид мэдэгдэл илгээх</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="deactivateReceiverAccount" name="DeactivateReceiverAccount" value="true" />
+                                <label class="form-check-label" for="deactivateReceiverAccount">Хүлээн авагчийн дансыг идэвхгүй болгох</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="deactivateReceiverUser" name="DeactivateReceiverUser" value="true" />
+                                <label class="form-check-label" for="deactivateReceiverUser">Хүлээн авагчийн нэвтрэх эрхийг идэвхгүй болгох</label>
+                            </div>
+                            <textarea class="form-control mt-2" name="ReceiverNotificationMessage" rows="2" placeholder="Хүлээн авагчид илгээх мэдэгдлийн текст"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border rounded p-3 mb-3 bg-light">
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" id="sendUserNotification" name="SendUserNotification" value="true" />
-                        <label class="form-check-label fw-semibold" for="sendUserNotification">Хэрэглэгчид мэдэгдэл илгээх</label>
+                        <label class="form-check-label fw-semibold" for="sendUserNotification">Review төлөвийн стандарт мэдэгдлийг илгээгчид илгээх</label>
                     </div>
                     <label class="form-label small text-muted" for="userNotificationMessage">Мэдэгдлийн текст</label>
                     <textarea class="form-control" id="userNotificationMessage" name="UserNotificationMessage" rows="3"
@@ -170,6 +208,39 @@ else if (!isLoading)
         </div>
     </div>
 }
+
+<style>
+    .suspicious-modal-shell {
+        position: fixed;
+        inset: 0;
+        z-index: 4300;
+        display: grid;
+        place-items: start center;
+        padding: clamp(1rem, 3vh, 2rem);
+        overflow-y: auto;
+    }
+
+    .suspicious-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: block;
+        background: rgba(15, 23, 42, .42);
+        backdrop-filter: blur(7px);
+        text-decoration: none;
+    }
+
+    .suspicious-modal-card {
+        position: relative;
+        width: min(980px, calc(100vw - 2rem));
+        max-height: calc(100dvh - 2rem);
+        overflow-y: auto;
+        border: 1px solid rgba(15, 23, 42, .12);
+        border-radius: 1.1rem;
+        background: #fff;
+        box-shadow: 0 28px 80px rgba(15, 23, 42, .28);
+        padding: clamp(1rem, 2.2vw, 1.5rem);
+    }
+</style>
 
 @code {
     private AdminPagedResultDto<AdminSuspiciousTransactionDto> suspiciousTransactions = new();

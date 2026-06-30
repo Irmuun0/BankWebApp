@@ -19,4 +19,15 @@ public interface IGeminiAnalysisService
         string question,
         string? modelName = null,
         CancellationToken cancellationToken = default);
+
+    Task<(bool Success, string? Answer, string? ErrorMessage)> AskPublicBankInfoQuestionAsync(
+        string question,
+        IReadOnlyList<PublicBankChatMessageDto> conversation,
+        CancellationToken cancellationToken = default);
+
+    Task<(bool Success, string? Answer, string? ErrorMessage)> AskUserFinanceQuestionAsync(
+        string question,
+        UserFinanceChatContextDto context,
+        IReadOnlyList<PublicBankChatMessageDto> conversation,
+        CancellationToken cancellationToken = default);
 }

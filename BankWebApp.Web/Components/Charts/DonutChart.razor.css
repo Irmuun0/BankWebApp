@@ -1,104 +1,156 @@
 .chart-card {
-    border: 1px solid #d8e0ec;
-    border-radius: 0.5rem;
-    background: #fff;
-    padding: 1rem;
     height: 100%;
+    padding: 1.15rem 1.2rem;
+    border: 1px solid rgba(14, 60, 153, .10);
+    border-radius: 1.25rem;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, .98), rgba(255, 255, 255, .94)),
+        radial-gradient(circle at top right, rgba(197, 148, 72, .08), transparent 16rem);
+    box-shadow: 0 18px 46px rgba(0, 12, 48, .075);
+    overflow: hidden;
 }
 
 .chart-card-header {
-    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    gap: .85rem;
+    margin-bottom: .85rem;
 }
 
 .chart-card h3 {
     margin: 0;
-    font-size: 1rem;
-    font-weight: 700;
-    color: #243044;
+    color: var(--phoebe-navy, #000c30);
+    font-family: var(--font-cyrillic, "Noto Sans", system-ui, sans-serif) !important;
+    font-size: 1.02rem;
+    font-weight: 860;
+    line-height: 1.2;
 }
 
 .chart-card p {
-    margin: 0.15rem 0 0;
+    margin: .28rem 0 0;
     color: #64748b;
-    font-size: 0.85rem;
+    font-family: var(--font-cyrillic, "Noto Sans", system-ui, sans-serif) !important;
+    font-size: .84rem;
+    font-weight: 520;
+    line-height: 1.42;
+}
+
+.chart-unit {
+    align-self: start;
+    padding: .26rem .52rem;
+    border-radius: 999px;
+    color: var(--phoebe-blue, #0e3c99);
+    background: rgba(14, 60, 153, .08);
+    font-size: .72rem;
+    font-weight: 900;
 }
 
 .chart-empty {
+    min-height: 150px;
+    display: grid;
+    place-items: center;
     color: #64748b;
-    font-size: 0.9rem;
+    font-size: .92rem;
 }
 
 .donut-chart-layout {
     display: grid;
-    grid-template-columns: 150px 1fr;
+    grid-template-columns: minmax(8.8rem, 9.5rem) minmax(0, 1fr);
     align-items: center;
     gap: 1rem;
+    min-height: 170px;
 }
 
-.donut-chart {
-    width: 150px;
-    aspect-ratio: 1;
-    border-radius: 50%;
+.bb-donut-wrap {
+    position: relative;
+    width: 9.5rem;
+    height: 9.5rem;
     display: grid;
     place-items: center;
+    filter: drop-shadow(0 12px 22px rgba(0, 12, 48, .09));
+}
+
+.bb-donut-wrap canvas {
+    display: block;
+    width: 9.5rem !important;
+    height: 9.5rem !important;
+    max-width: 9.5rem !important;
+    max-height: 9.5rem !important;
 }
 
 .donut-chart-center {
-    width: 62%;
-    aspect-ratio: 1;
-    border-radius: 50%;
-    background: #fff;
+    position: absolute;
+    inset: 50% auto auto 50%;
     display: grid;
     place-items: center;
     align-content: center;
-    box-shadow: inset 0 0 0 1px #e5ebf3;
+    width: 4.85rem;
+    min-height: 4.85rem;
+    padding: .4rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .96);
     text-align: center;
+    transform: translate(-50%, -50%);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .06);
 }
 
 .donut-chart-center strong {
-    color: #243044;
-    font-size: 1rem;
-    font-variant-numeric: tabular-nums;
+    max-width: 4.3rem;
+    color: var(--phoebe-navy, #000c30);
+    font-family: var(--font-number, "JetBrains Mono", ui-monospace, monospace) !important;
+    font-size: .78rem;
+    font-weight: 900;
+    line-height: 1.08;
+    overflow-wrap: anywhere;
 }
 
 .donut-chart-center span {
     color: #64748b;
-    font-size: 0.75rem;
+    font-size: .62rem;
+    font-weight: 820;
 }
 
 .donut-chart-legend {
     display: grid;
-    gap: 0.55rem;
+    gap: .52rem;
+    min-width: 0;
 }
 
 .donut-chart-legend-item {
     display: grid;
-    grid-template-columns: 0.8rem minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0.5rem;
+    gap: .55rem;
+    min-width: 0;
 }
 
 .donut-chart-swatch {
-    width: 0.8rem;
-    height: 0.8rem;
-    border-radius: 50%;
+    width: .66rem;
+    height: .66rem;
+    border-radius: 999px;
 }
 
 .donut-chart-label {
     color: #334155;
-    font-weight: 600;
-    overflow-wrap: anywhere;
+    font-size: .84rem;
+    font-weight: 800;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .donut-chart-value {
-    color: #475569;
-    font-variant-numeric: tabular-nums;
+    color: var(--phoebe-navy, #000c30);
+    font-family: var(--font-number, "JetBrains Mono", ui-monospace, monospace) !important;
+    font-size: .78rem;
+    font-weight: 820;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 720px) {
     .donut-chart-layout {
         grid-template-columns: 1fr;
         justify-items: center;
+        min-height: 0;
     }
 
     .donut-chart-legend {

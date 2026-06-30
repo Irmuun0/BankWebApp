@@ -147,6 +147,7 @@ public class AdminService : IAdminService
                 AccountType = account.AccountType,
                 Currency = account.Currency,
                 Balance = account.Balance,
+                DailyTransactionLimitMnt = account.DailyTransactionLimitMnt,
                 IsActive = account.IsActive,
                 CreatedAt = account.CreatedAt
             })
@@ -164,6 +165,113 @@ public class AdminService : IAdminService
             PageSize = pageInfo.PageSize,
             TotalItems = totalItems
         };
+    }
+
+    public async Task<AdminAccountLimitDetailsDto?> GetAccountLimitDetailsAsync(
+        long accountId,
+        CancellationToken cancellationToken = default)
+    {
+        var account = await _dbContext.Accounts
+            .AsNoTracking()
+            .Where(account => account.Id == accountId)
+            .Select(account => new AdminAccountLimitDetailsDto
+            {
+                AccountId = account.Id,
+                AccountNumber = account.AccountNumber,
+                Currency = account.Currency,
+                OwnerName = ((account.User.FirstName ?? "") + " " + (account.User.LastName ?? "")).Trim(),
+                CurrentDailyLimitMnt = account.DailyTransactionLimitMnt
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (account is null)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(account.OwnerName))
+        {
+            account.OwnerName = null;
+        }
+
+        account.Histories = await _dbContext.AccountTransactionLimitHistories
+            .AsNoTracking()
+            .Where(history => history.AccountId == accountId)
+            .OrderByDescending(history => history.CreatedAt)
+            .ThenByDescending(history => history.Id)
+            .Take(20)
+            .Select(history => new AdminAccountLimitHistoryDto
+            {
+                Id = history.Id,
+                OldLimitAmount = history.OldLimitAmount,
+                NewLimitAmount = history.NewLimitAmount,
+                ChangedByUsername = history.ChangedByUser == null ? null : history.ChangedByUser.Username,
+                Reason = history.Reason,
+                CreatedAt = history.CreatedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        return account;
+    }
+
+    public async Task<(bool Success, string? ErrorMessage)> UpdateAccountTransactionLimitAsync(
+        long adminUserId,
+        UpdateAccountTransactionLimitDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var account = await _dbContext.Accounts
+            .FirstOrDefaultAsync(account => account.Id == dto.AccountId, cancellationToken);
+
+        if (account is null)
+        {
+            return (false, "Данс олдсонгүй.");
+        }
+
+        if (dto.DailyLimitMnt <= 0)
+        {
+            return (false, "Өдрийн лимитийн дүн 0-ээс их байх ёстой.");
+        }
+
+        var nextLimit = decimal.Round(dto.DailyLimitMnt, 2, MidpointRounding.AwayFromZero);
+        var oldLimit = account.DailyTransactionLimitMnt;
+        if (oldLimit == nextLimit)
+        {
+            return (true, "Өдрийн гүйлгээний лимит өөрчлөгдөөгүй байна.");
+        }
+
+        var now = MongoliaClock.Now;
+        var reason = string.IsNullOrWhiteSpace(dto.Reason)
+            ? null
+            : dto.Reason.Trim();
+
+        await using var dbTransaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        account.DailyTransactionLimitMnt = nextLimit;
+        account.UpdatedAt = now;
+
+        _dbContext.AccountTransactionLimitHistories.Add(new AccountTransactionLimitHistory
+        {
+            AccountId = account.Id,
+            OldLimitAmount = oldLimit,
+            NewLimitAmount = nextLimit,
+            ChangedByUserId = adminUserId,
+            Reason = reason,
+            CreatedAt = now
+        });
+
+        AddAuditLog(
+            adminUserId,
+            "ACCOUNT_TRANSACTION_LIMIT_UPDATED",
+            "accounts",
+            account.Id,
+            new { DailyTransactionLimitMnt = oldLimit },
+            new { DailyTransactionLimitMnt = nextLimit },
+            $"Account {account.AccountNumber} daily transaction limit updated.");
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await dbTransaction.CommitAsync(cancellationToken);
+
+        return (true, "Өдрийн гүйлгээний лимит амжилттай шинэчлэгдлээ.");
     }
 
     public async Task<AdminPagedResultDto<AdminTransactionDto>> GetTransactionsAsync(
@@ -1305,6 +1413,64 @@ public class AdminService : IAdminService
         return detail is null ? null : MapSuspiciousDetail(detail);
     }
 
+    public async Task<(bool Success, string? ErrorMessage)> EnsureSuspiciousReviewAsync(
+        long adminUserId,
+        long transactionId,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await _dbContext.SuspiciousTransactionDetails
+            .AnyAsync(detail => detail.TransactionId == transactionId, cancellationToken);
+        if (existing)
+        {
+            return (true, null);
+        }
+
+        var transaction = await _dbContext.Transactions
+            .Include(item => item.TransactionDetectionLogs)
+            .Include(item => item.AiTransactionAnalysisLogs)
+            .FirstOrDefaultAsync(item => item.Id == transactionId, cancellationToken);
+        if (transaction is null)
+        {
+            return (false, "Гүйлгээ олдсонгүй.");
+        }
+
+        var latestDetection = transaction.TransactionDetectionLogs
+            .OrderByDescending(log => log.CreatedAt)
+            .FirstOrDefault();
+        var latestAi = transaction.AiTransactionAnalysisLogs
+            .OrderByDescending(log => log.CreatedAt)
+            .FirstOrDefault();
+        var now = MongoliaClock.Now;
+
+        var detail = new SuspiciousTransactionDetail
+        {
+            TransactionId = transaction.Id,
+            RiskScore = latestAi?.RiskScore ?? latestDetection?.RiskScore ?? 0m,
+            SuspiciousReason = latestAi?.Explanation ?? latestDetection?.Reason ?? "Admin AI Detection дэлгэцээс review workflow үүсгэсэн.",
+            AiExplanation = latestAi?.Explanation,
+            ReviewStatus = "REVIEWING",
+            ReviewNote = "AI Detection дэлгэцээс арга хэмжээ авах workflow үүсгэсэн.",
+            ReviewedBy = adminUserId,
+            ReviewedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        transaction.IsSuspicious = true;
+        _dbContext.SuspiciousTransactionDetails.Add(detail);
+        AddAuditLog(
+            adminUserId,
+            "SUSPICIOUS_REVIEW_CREATED_FROM_AI",
+            "transactions",
+            transaction.Id,
+            new { transaction.IsSuspicious },
+            new { IsSuspicious = true, detail.ReviewStatus, detail.RiskScore },
+            $"Suspicious review workflow created from AI Detection for transaction #{transaction.Id}.");
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return (true, null);
+    }
+
     public async Task<(bool Success, string? ErrorMessage)> UpdateSuspiciousReviewAsync(
         long adminUserId,
         UpdateSuspiciousReviewDto dto,
@@ -1318,6 +1484,10 @@ public class AdminService : IAdminService
         var detail = await _dbContext.SuspiciousTransactionDetails
             .Include(item => item.Transaction)
                 .ThenInclude(transaction => transaction.FromAccount)
+                    .ThenInclude(account => account.User)
+            .Include(item => item.Transaction)
+                .ThenInclude(transaction => transaction.ToAccount)
+                    .ThenInclude(account => account.User)
             .FirstOrDefaultAsync(item => item.TransactionId == dto.TransactionId, cancellationToken);
 
         if (detail is null)
@@ -1345,6 +1515,37 @@ public class AdminService : IAdminService
         detail.ReviewedAt = now;
         detail.UpdatedAt = now;
 
+        var senderAccount = detail.Transaction.FromAccount;
+        var receiverAccount = detail.Transaction.ToAccount;
+        var senderUser = senderAccount.User;
+        var receiverUser = receiverAccount.User;
+
+        if ((dto.DeactivateSenderUser && senderUser.Id == adminUserId) ||
+            (dto.DeactivateReceiverUser && receiverUser.Id == adminUserId))
+        {
+            return (false, "Өөрийн admin эрхийг энэ workflow-оор идэвхгүй болгох боломжгүй.");
+        }
+
+        if (dto.DeactivateSenderAccount)
+        {
+            DeactivateSuspiciousAccount(adminUserId, senderAccount, detail.TransactionId, "SENDER_ACCOUNT_DEACTIVATED");
+        }
+
+        if (dto.DeactivateReceiverAccount && receiverAccount.Id != senderAccount.Id)
+        {
+            DeactivateSuspiciousAccount(adminUserId, receiverAccount, detail.TransactionId, "RECEIVER_ACCOUNT_DEACTIVATED");
+        }
+
+        if (dto.DeactivateSenderUser)
+        {
+            DeactivateSuspiciousUser(adminUserId, senderUser, detail.TransactionId, "SENDER_USER_DEACTIVATED");
+        }
+
+        if (dto.DeactivateReceiverUser && receiverUser.Id != senderUser.Id)
+        {
+            DeactivateSuspiciousUser(adminUserId, receiverUser, detail.TransactionId, "RECEIVER_USER_DEACTIVATED");
+        }
+
         AddAuditLog(
             adminUserId,
             "SUSPICIOUS_REVIEW_UPDATED",
@@ -1366,6 +1567,26 @@ public class AdminService : IAdminService
         if (notification is not null)
         {
             _dbContext.Notifications.Add(notification);
+        }
+
+        if (dto.NotifySender)
+        {
+            _dbContext.Notifications.Add(BuildFraudActionNotification(
+                senderUser.Id,
+                detail.TransactionId,
+                "Гүйлгээний аюулгүй байдлын мэдэгдэл",
+                dto.SenderNotificationMessage,
+                $"Таны {senderAccount.AccountNumber} данстай холбоотой гүйлгээнд аюулгүй байдлын нэмэлт шалгалт хийгдлээ. Шаардлагатай бол банкны ажилтантай холбогдоно уу."));
+        }
+
+        if (dto.NotifyReceiver && receiverUser.Id != senderUser.Id)
+        {
+            _dbContext.Notifications.Add(BuildFraudActionNotification(
+                receiverUser.Id,
+                detail.TransactionId,
+                "Гүйлгээний аюулгүй байдлын мэдэгдэл",
+                dto.ReceiverNotificationMessage,
+                $"Таны {receiverAccount.AccountNumber} данс руу орсон гүйлгээнд аюулгүй байдлын нэмэлт шалгалт хийгдлээ. Шаардлагатай бол банкны ажилтантай холбогдоно уу."));
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -1811,6 +2032,12 @@ public class AdminService : IAdminService
         return userId is null ? "system" : $"user #{userId}";
     }
 
+    private static string BuildUserDisplayName(User user)
+    {
+        var fullName = $"{user.FirstName} {user.LastName}".Trim();
+        return string.IsNullOrWhiteSpace(fullName) ? user.Username : fullName;
+    }
+
     private static string HumanizeAction(string value)
     {
         return value.Replace('_', ' ').ToLowerInvariant();
@@ -1996,8 +2223,10 @@ public class AdminService : IAdminService
             .AsNoTracking()
             .Include(detail => detail.Transaction)
                 .ThenInclude(transaction => transaction.FromAccount)
+                    .ThenInclude(account => account.User)
             .Include(detail => detail.Transaction)
                 .ThenInclude(transaction => transaction.ToAccount)
+                    .ThenInclude(account => account.User)
             .Include(detail => detail.ReviewedByNavigation);
     }
 
@@ -2134,8 +2363,14 @@ public class AdminService : IAdminService
         return new AdminSuspiciousTransactionDto
         {
             TransactionId = detail.TransactionId,
+            FromAccountId = detail.Transaction.FromAccountId,
             FromAccountNumber = detail.Transaction.FromAccount.AccountNumber,
+            FromUserId = detail.Transaction.FromAccount.UserId,
+            FromUserName = BuildUserDisplayName(detail.Transaction.FromAccount.User),
+            ToAccountId = detail.Transaction.ToAccountId,
             ToAccountNumber = detail.Transaction.ToAccount.AccountNumber,
+            ToUserId = detail.Transaction.ToAccount.UserId,
+            ToUserName = BuildUserDisplayName(detail.Transaction.ToAccount.User),
             Amount = detail.Transaction.Amount,
             SourceCurrency = detail.Transaction.SourceCurrency,
             CreditedAmount = detail.Transaction.CreditedAmount,
@@ -2200,6 +2435,78 @@ public class AdminService : IAdminService
         var totalPages = totalItems == 0 ? 1 : (int)Math.Ceiling(totalItems / (double)normalizedPageSize);
         var normalizedPage = Math.Clamp(page, 1, totalPages);
         return (normalizedPage, normalizedPageSize);
+    }
+
+    private void DeactivateSuspiciousAccount(long adminUserId, Account account, long transactionId, string action)
+    {
+        if (!account.IsActive)
+        {
+            return;
+        }
+
+        var oldValue = new { account.IsActive };
+        account.IsActive = false;
+        account.UpdatedAt = MongoliaClock.Now;
+
+        AddAuditLog(
+            adminUserId,
+            action,
+            "accounts",
+            account.Id,
+            oldValue,
+            new { account.IsActive, transactionId },
+            $"Account {account.AccountNumber} deactivated from suspicious transaction #{transactionId} workflow.");
+
+        _dbContext.Notifications.Add(new Notification
+        {
+            UserId = account.UserId,
+            TransactionId = transactionId,
+            NotificationType = "ACCOUNT_STATUS_UPDATED",
+            Title = "Дансны төлөв өөрчлөгдлөө",
+            Message = $"Таны {account.AccountNumber} данс аюулгүй байдлын шалгалтын хүрээнд түр идэвхгүй боллоо. Дэлгэрэнгүй мэдээлэл авах бол банкны ажилтантай холбогдоно уу.",
+            IsRead = false,
+            CreatedAt = account.UpdatedAt
+        });
+    }
+
+    private void DeactivateSuspiciousUser(long adminUserId, User user, long transactionId, string action)
+    {
+        if (!user.IsActive)
+        {
+            return;
+        }
+
+        var oldValue = new { user.IsActive };
+        user.IsActive = false;
+        user.UpdatedAt = MongoliaClock.Now;
+
+        AddAuditLog(
+            adminUserId,
+            action,
+            "users",
+            user.Id,
+            oldValue,
+            new { user.IsActive, transactionId },
+            $"User {user.Username} deactivated from suspicious transaction #{transactionId} workflow.");
+    }
+
+    private static Notification BuildFraudActionNotification(
+        long userId,
+        long transactionId,
+        string title,
+        string? customMessage,
+        string defaultMessage)
+    {
+        return new Notification
+        {
+            UserId = userId,
+            TransactionId = transactionId,
+            NotificationType = "SECURITY_REVIEW_UPDATE",
+            Title = title,
+            Message = string.IsNullOrWhiteSpace(customMessage) ? defaultMessage : customMessage.Trim(),
+            IsRead = false,
+            CreatedAt = MongoliaClock.Now
+        };
     }
 
     private static Notification? BuildReviewNotification(SuspiciousTransactionDetail detail, string? customMessage)

@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app.config import settings
-from app.models import GeminiAnalysisContext, GeminiAnalysisResponse
+from app.models import BankInfoChatMessage, GeminiAnalysisContext, GeminiAnalysisResponse
 
 
 class GeminiClientError(RuntimeError):
@@ -68,6 +68,32 @@ def answer_follow_up(context: GeminiAnalysisContext, existing_analysis: str, que
 
     prompt = _build_follow_up_prompt(context, existing_analysis, question.strip())
     text, _ = _generate_text(prompt, max_output_tokens=900, model_name=_resolve_model_name(model_name))
+    return _normalize_text(text)
+
+
+def answer_bank_info_question(question: str, conversation: list[BankInfoChatMessage] | None = None) -> str:
+    """Public Chubi chat-д Phoebe Bank системийн мэдээлэлд суурилсан хариу өгнө."""
+
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Асуулт хоосон байна.")
+
+    prompt = _build_bank_info_prompt(question.strip(), conversation or [])
+    text, _ = _generate_text(prompt, max_output_tokens=850, model_name=SAFE_DEFAULT_MODEL)
+    return _normalize_text(text)
+
+
+def answer_user_finance_question(
+    question: str,
+    context: dict[str, Any],
+    conversation: list[BankInfoChatMessage] | None = None,
+) -> str:
+    """Logged-in Chubi chat-д хэрэглэгчийн sanitized санхүүгийн context дээр хариулна."""
+
+    if not question.strip():
+        raise HTTPException(status_code=400, detail="Асуулт хоосон байна.")
+
+    prompt = _build_user_finance_prompt(question.strip(), context, conversation or [])
+    text, _ = _generate_text(prompt, max_output_tokens=1100, model_name=SAFE_DEFAULT_MODEL)
     return _normalize_text(text)
 
 
@@ -242,6 +268,107 @@ Transaction summary:
 Админы асуулт:
 {question}
 """.strip()
+
+
+def _build_bank_info_prompt(question: str, conversation: list[BankInfoChatMessage]) -> str:
+    history = _format_bank_info_history(conversation[-8:])
+    return f"""
+You are Chubi AI, Phoebe Bank's own public information assistant.
+Answer by question's language.
+Do not use Markdown tables, code blocks, or bold syntax.
+Use short, clear paragraphs or a compact numbered list.
+You must answer only from the Phoebe Bank system knowledge below.
+If the user asks for personal balance, account-specific data, password, PIN, national ID, phone, email, or a real banking operation, do not ask for sensitive data. Tell them to log in or contact the bank/admin.
+If the question is unrelated to Phoebe Bank services, politely say you can answer only about Phoebe Bank.
+Do not invent fees, legal policy, branch locations, phone numbers, or products not listed here.
+Tone rules:
+- Speak as Phoebe Bank's assistant, not as an outside narrator.
+- Prefer phrases like "Манай банк", "Phoebe Bank таны", "манай систем", "та манай вебээр".
+- Do not repeatedly say "энэ төсөл", "demo system", or "системийн мэдээлэл" to the customer unless the user asks a technical question.
+- Keep the answer service-oriented, concise, and confident.
+- If explaining a limitation, phrase it politely as Phoebe Bank guidance.
+
+Phoebe Bank system knowledge:
+1. Phoebe Bank is the demo bank web system used in this project.
+2. Public users can see the home page, exchange-rate information, and this Chubi AI information chat before login.
+3. There are separate user and admin login flows. The public chat cannot log users in or perform transactions.
+4. User dashboard shows selected account, balances, account status summary, and recent transactions.
+5. Users can open checking accounts in MNT or USD. The database account type CHECKING is shown to users as "Харилцах".
+6. Users can view "Миний дансууд", account details, account status, primary account, opened date, last transaction date, and account owner.
+7. Each user can choose one primary account. When another account becomes primary, the previous primary account is unset.
+8. Users can activate or deactivate their own accounts from account settings.
+9. Transactions support transfers between own accounts and to another user's account. The sender account must be active, and the receiver account is validated.
+10. Sending from and to the same account is blocked.
+11. Transaction description, shown as "Гүйлгээний утга", is required.
+12. A successful transaction shows amount, date/time, remaining balance, receiver name, receiver account, and transaction description.
+13. MNT/USD currency conversion uses Phoebe Bank's customer buy/sell rates based on the latest MongolBank official rate plus bank settings.
+14. USD to MNT uses the bank buy rate. MNT to USD uses the bank sell rate.
+15. Converted money is truncated to two decimal places, not rounded. If the received converted amount would be less than 1.00 in the target currency, the transfer is blocked.
+16. Public exchange-rate cards show MongolBank rates. USD also shows Phoebe Bank buy and sell prices.
+17. Every account has a daily outgoing transaction limit measured in MNT. The default daily limit is 50,000,000 MNT. There is no unlimited account and no separate single-transfer limit.
+18. The daily limit is calculated per account by summing that account's outgoing transactions for the current day in MNT equivalent.
+19. Security: 5 failed login attempts lock the account for 15 minutes using server/database time. User sessions automatically log out after 30 minutes.
+20. Rule-based suspicious transaction detection can check transactions. Admin reviews suspicious transactions and may notify users when action is needed.
+21. Admin features include users, accounts, all transactions, AI Detection, suspicious transaction review, detection reports, fraud rule settings, exchange-rate settings, FX income report, and audit log.
+
+Previous chat:
+{history}
+
+User question:
+{question}
+""".strip()
+
+
+def _build_user_finance_prompt(question: str, context: dict[str, Any], conversation: list[BankInfoChatMessage]) -> str:
+    history = _format_bank_info_history(conversation[-8:])
+    context_json = json.dumps(context, ensure_ascii=False, default=str, indent=2)
+    return f"""
+You are Chubi AI, Phoebe Bank's own logged-in customer finance assistant.
+Answer only in Mongolian Cyrillic.
+Do not use Markdown tables, code blocks, or bold syntax.
+Use short, clear paragraphs and compact numbered lists when useful.
+Speak as Phoebe Bank's assistant using phrases like "манай банк", "Phoebe Bank таны", and "таны дансны мэдээллээс харахад".
+
+Privacy and safety rules:
+- Use only the sanitized context below.
+- Never ask for password, PIN, register/national ID, phone number, email, card number, or full account number.
+- Account numbers in the context are already masked. Do not try to reconstruct them.
+- Do not claim you completed a banking operation. You can only explain, summarize, and guide.
+- Do not give investment, tax, or legal advice. If the user asks for that, give a careful general explanation and suggest contacting a professional.
+- If the answer cannot be determined from the provided data, say "энэ өгөгдлөөр баттай хэлэх боломжгүй".
+- Distinguish clearly between income, expense, net cashflow, balance, and daily transfer limit.
+- If transaction history is empty, explain what information will become available after transactions exist.
+
+What you can help with:
+1. Сүүлийн 30 хоногийн орлого, зарлага, цэвэр мөнгөн урсгалын товч дүгнэлт.
+2. Сүүлийн 15 хоногийн өөрчлөлт.
+3. Сүүлийн 30 гүйлгээний давтамж, гол утга, валютын хэрэглээ.
+4. Дансны үлдэгдэл, идэвхтэй эсэх, үндсэн данс, өдрийн лимитийн ойлгомжтой тайлбар.
+5. Хэрэглэгчид дараагийн алхам санал болгох: гүйлгээний түүхээ шалгах, дансны тохиргоо харах, лимитээ админаар өөрчлүүлэх гэх мэт.
+
+Previous chat:
+{history}
+
+Sanitized user finance context:
+{context_json}
+
+User question:
+{question}
+""".strip()
+
+
+def _format_bank_info_history(conversation: list[BankInfoChatMessage]) -> str:
+    if not conversation:
+        return "-"
+
+    lines: list[str] = []
+    for message in conversation:
+        role = "Assistant" if message.role.lower() == "assistant" else "User"
+        content = re.sub(r"\s+", " ", message.content.strip())
+        if content:
+            lines.append(f"{role}: {content[:700]}")
+
+    return "\n".join(lines) if lines else "-"
 
 
 def _format_context(context: GeminiAnalysisContext) -> str:

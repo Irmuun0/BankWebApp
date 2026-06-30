@@ -6,7 +6,6 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h1>Бүх гүйлгээ</h1>
-    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
 </div>
 
 @if (isLoading)
@@ -34,7 +33,7 @@ else
 }
 else if (!isLoading)
 {
-    <table class="table table-striped align-middle">
+    <table class="table table-striped align-middle admin-transactions-table">
         <thead>
             <tr>
                 <th>Огноо</th>
@@ -50,55 +49,68 @@ else if (!isLoading)
             </tr>
         </thead>
         <tbody>
-            @foreach (var transaction in transactions.Items)
+            @foreach (var group in transactions.Items.GroupBy(transaction => DateOnly.FromDateTime(transaction.CreatedAt)).OrderByDescending(group => group.Key))
             {
-                <tr>
-                    <td>@transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                    <td>@transaction.FromAccountNumber</td>
-                    <td>@transaction.ToAccountNumber</td>
-                    <td>@transaction.Amount.ToString("N2") @transaction.SourceCurrency</td>
-                    <td>@transaction.CreditedAmount.ToString("N2") @transaction.TargetCurrency</td>
-                    <td>@transaction.Status</td>
-                    <td>
-                        @if (transaction.IsSuspicious)
-                        {
-                            <a class="badge text-bg-danger text-decoration-none" href="/admin/suspicious-transactions/@transaction.Id">Тийм</a>
-                        }
-                        else
-                        {
-                            <span class="badge text-bg-light border">Үгүй</span>
-                        }
-                    </td>
-                    <td>
-                        <span class="badge @DetectionBadgeClass(transaction.DetectionStatus)">@DisplayDetectionStatus(transaction.DetectionStatus)</span>
-                        @if (transaction.DetectionLoggedAt is not null)
-                        {
-                            <div class="small text-muted">@transaction.DetectionLoggedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
-                        }
-                    </td>
-                    <td>
-                        @if (transaction.DetectionRiskScore is null)
-                        {
-                            <span>-</span>
-                        }
-                        else
-                        {
-                            <span>@transaction.DetectionRiskScore.Value.ToString("N2")</span>
-                        }
-                    </td>
-                    <td>@transaction.Description</td>
+                <tr class="transaction-date-group">
+                    <td colspan="10">@group.Key.ToString("yyyy.MM.dd")</td>
                 </tr>
-                @if (!string.IsNullOrWhiteSpace(transaction.DetectionReason))
+
+                @foreach (var transaction in group)
                 {
                     <tr>
-                        <td colspan="10" class="small text-muted">
-                            <span class="fw-semibold">Detection тайлбар:</span> @transaction.DetectionReason
-                            @if (!string.IsNullOrWhiteSpace(transaction.DetectionTriggeredRules))
+                        <td class="numeric-cell transaction-time-cell">@transaction.CreatedAt.ToString("HH:mm")</td>
+                        <td><span class="numeric-cell">@transaction.FromAccountNumber</span></td>
+                        <td><span class="numeric-cell">@transaction.ToAccountNumber</span></td>
+                        <td class="numeric-cell money-stack">
+                            <span class="money-amount">@transaction.Amount.ToString("N2")</span>
+                            <span class="money-currency">@transaction.SourceCurrency</span>
+                        </td>
+                        <td class="numeric-cell money-stack">
+                            <span class="money-amount">@transaction.CreditedAmount.ToString("N2")</span>
+                            <span class="money-currency">@transaction.TargetCurrency</span>
+                        </td>
+                        <td class="latin-cell">@transaction.Status</td>
+                        <td>
+                            @if (transaction.IsSuspicious)
                             {
-                                <span class="ms-2"><span class="fw-semibold">Rules:</span> @transaction.DetectionTriggeredRules</span>
+                                <a class="badge text-bg-danger text-decoration-none" href="/admin/suspicious-transactions/@transaction.Id">Тийм</a>
+                            }
+                            else
+                            {
+                                <span class="badge text-bg-light border">Үгүй</span>
                             }
                         </td>
+                        <td>
+                            <span class="badge @DetectionBadgeClass(transaction.DetectionStatus)">@DisplayDetectionStatus(transaction.DetectionStatus)</span>
+                            @if (transaction.DetectionLoggedAt is not null)
+                            {
+                                <div class="small text-muted numeric-cell">@transaction.DetectionLoggedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                            }
+                        </td>
+                        <td>
+                            @if (transaction.DetectionRiskScore is null)
+                            {
+                                <span>-</span>
+                            }
+                            else
+                            {
+                                <span class="numeric-cell">@transaction.DetectionRiskScore.Value.ToString("N2")</span>
+                            }
+                        </td>
+                        <td>@transaction.Description</td>
                     </tr>
+                    @if (!string.IsNullOrWhiteSpace(transaction.DetectionReason))
+                    {
+                        <tr>
+                            <td colspan="10" class="small text-muted">
+                                <span class="fw-semibold">Detection тайлбар:</span> @transaction.DetectionReason
+                                @if (!string.IsNullOrWhiteSpace(transaction.DetectionTriggeredRules))
+                                {
+                                    <span class="ms-2"><span class="fw-semibold">Rules:</span> @transaction.DetectionTriggeredRules</span>
+                                }
+                            </td>
+                        </tr>
+                    }
                 }
             }
         </tbody>

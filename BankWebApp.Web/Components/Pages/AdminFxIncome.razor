@@ -1,5 +1,6 @@
 @page "/admin/fx-income"
 @attribute [Authorize(Roles = "ADMIN")]
+@rendermode InteractiveServer
 @inject IAdminService AdminService
 
 <PageTitle>Админ - FX орлогын тайлан</PageTitle>
@@ -9,7 +10,6 @@
         <h1>Ханшийн зөрүүний орлогын тайлан</h1>
         <div class="text-muted small">MNT/USD хөрвүүлэлт дээр ашигласан авах/зарах ханш болон албан ханшийн зөрүүнээс үүссэн орлого.</div>
     </div>
-    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
 </div>
 
 @if (isLoading)

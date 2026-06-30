@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using BankWebApp.Web.Data.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +13,8 @@ public partial class BankDbContext : DbContext
     }
 
     public virtual DbSet<Account> Accounts { get; set; }
+
+    public virtual DbSet<AccountTransactionLimitHistory> AccountTransactionLimitHistories { get; set; }
 
     public virtual DbSet<AdminSuspiciousTransactionView> AdminSuspiciousTransactionViews { get; set; }
 
@@ -85,6 +87,10 @@ public partial class BankDbContext : DbContext
             entity.Property(e => e.Balance)
                 .HasColumnType("decimal(18, 2)")
                 .HasColumnName("balance");
+            entity.Property(e => e.DailyTransactionLimitMnt)
+                .HasColumnType("decimal(18, 2)")
+                .HasDefaultValue(50000000.00m, "df_accounts_daily_transaction_limit_mnt")
+                .HasColumnName("daily_transaction_limit_mnt");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(sysutcdatetime())", "df_accounts_created_at")
                 .HasColumnName("created_at");
@@ -106,6 +112,40 @@ public partial class BankDbContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("fk_accounts_user");
+        });
+
+        modelBuilder.Entity<AccountTransactionLimitHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pk_account_transaction_limit_histories");
+
+            entity.ToTable("account_transaction_limit_histories");
+
+            entity.HasIndex(e => new { e.AccountId, e.CreatedAt }, "idx_account_transaction_limit_histories_account_created");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AccountId).HasColumnName("account_id");
+            entity.Property(e => e.ChangedByUserId).HasColumnName("changed_by_user_id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(CONVERT([datetime2](0),sysutcdatetime() AT TIME ZONE 'UTC' AT TIME ZONE 'Ulaanbaatar Standard Time'))", "df_account_transaction_limit_histories_created_at")
+                .HasColumnName("created_at");
+            entity.Property(e => e.NewLimitAmount)
+                .HasColumnType("decimal(18, 2)")
+                .HasColumnName("new_limit_amount");
+            entity.Property(e => e.OldLimitAmount)
+                .HasColumnType("decimal(18, 2)")
+                .HasColumnName("old_limit_amount");
+            entity.Property(e => e.Reason)
+                .HasMaxLength(500)
+                .HasColumnName("reason");
+
+            entity.HasOne(d => d.Account).WithMany(p => p.AccountTransactionLimitHistories)
+                .HasForeignKey(d => d.AccountId)
+                .HasConstraintName("fk_account_transaction_limit_histories_account");
+
+            entity.HasOne(d => d.ChangedByUser).WithMany(p => p.AccountTransactionLimitHistories)
+                .HasForeignKey(d => d.ChangedByUserId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_account_transaction_limit_histories_admin_user");
         });
 
         modelBuilder.Entity<AdminSuspiciousTransactionView>(entity =>

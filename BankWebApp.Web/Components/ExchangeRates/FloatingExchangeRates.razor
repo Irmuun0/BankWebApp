@@ -1,8 +1,87 @@
+@using BankWebApp.Web.DTOs.Ai
 @using BankWebApp.Web.DTOs.ExchangeRates
 @rendermode InteractiveServer
 @inject IExchangeRateService ExchangeRateService
+@inject IGeminiAnalysisService GeminiService
+@inject ICurrentUserService CurrentUser
+@inject IAccountService AccountService
+@inject ITransactionService TransactionService
 
 <div class="floating-rate-widget">
+    @if (showChatPanel)
+    {
+        <section class="floating-chat-panel" aria-label="Chubi AI туслах">
+            <div class="floating-chat-header">
+                <div class="floating-chat-avatar" aria-hidden="true">C</div>
+                <div>
+                    <div class="floating-rate-title">Chubi AI туслах</div>
+                    <div class="floating-rate-subtitle">@ChatSubtitle</div>
+                </div>
+                <button class="floating-rate-close" type="button" aria-label="Хаах" @onclick="ToggleChatPanel">×</button>
+            </div>
+
+            @if (ShowModePicker)
+            {
+                <div class="floating-chat-mode-picker">
+                    <button type="button" class="floating-chat-mode-card" @onclick="() => SelectChatMode(ChatMode.BankInfo)">
+                        <span class="floating-chat-mode-icon">?</span>
+                        <span>
+                            <strong>Банкны үйлчилгээний талаар мэдээлэл авах</strong>
+                            <small>Данс, гүйлгээ, ханш, лимит зэрэг Phoebe Bank-ийн үйлчилгээний асуулт.</small>
+                        </span>
+                    </button>
+                    <button type="button" class="floating-chat-mode-card" @onclick="() => SelectChatMode(ChatMode.PersonalFinance)">
+                        <span class="floating-chat-mode-icon">₮</span>
+                        <span>
+                            <strong>Өөрийн санхүүгийн талаар тайлан авах</strong>
+                            <small>Сүүлийн 30 хоног болон сүүлийн 30 гүйлгээний мэдээлэл дээр суурилсан зөвлөгөө.</small>
+                        </span>
+                    </button>
+                </div>
+            }
+            else
+            {
+                @if (CanSwitchMode)
+                {
+                    <div class="floating-chat-mode-bar">
+                        <button type="button" class="floating-chat-mode-switch" @onclick="BackToModePicker">Сонголт солих</button>
+                        <span>@ActiveModeLabel</span>
+                    </div>
+                }
+
+                <div class="floating-chat-messages" role="log" aria-live="polite">
+                    @foreach (var message in chatMessages)
+                    {
+                        <div class="floating-chat-message @(message.Role == "user" ? "from-user" : "from-assistant")">
+                            <div class="floating-chat-bubble">@message.Content</div>
+                        </div>
+                    }
+
+                    @if (isChatSending)
+                    {
+                        <div class="floating-chat-message from-assistant">
+                            <div class="floating-chat-bubble typing">Хариу бэлдэж байна...</div>
+                        </div>
+                    }
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(chatError))
+                {
+                    <div class="floating-chat-error">@chatError</div>
+                }
+
+                <form class="floating-chat-form" @onsubmit="SendChatAsync" @onsubmit:preventDefault="true">
+                    <textarea @bind="chatQuestion"
+                              rows="2"
+                              maxlength="700"
+                              placeholder="@ChatPlaceholder"
+                              aria-label="Chubi AI-д асуулт бичих"></textarea>
+                    <button type="submit" disabled="@isChatSending">Илгээх</button>
+                </form>
+            }
+        </section>
+    }
+
     @if (showPanel)
     {
         <section class="floating-rate-panel" aria-label="Ханшийн мэдээлэл">
@@ -70,21 +149,21 @@
         </section>
     }
 
-    <button class="floating-rate-action floating-rate-money @(isExpanded ? "show" : "")"
+    <button class="floating-rate-action floating-rate-chat"
+            type="button"
+            aria-expanded="@showChatPanel"
+            aria-label="Chubi AI туслах нээх"
+            title="Chubi AI туслах"
+            @onclick="ToggleChatPanel">
+        <img class="floating-chat-icon" src="/images/ai-chat-button-icon.png" alt="" aria-hidden="true" />
+    </button>
+
+    <button class="floating-rate-action floating-rate-money"
             type="button"
             aria-label="Ханш харах"
             title="Ханш харах"
             @onclick="TogglePanel">
-        💵
-    </button>
-
-    <button class="floating-rate-action floating-rate-main"
-            type="button"
-            aria-expanded="@isExpanded"
-            aria-label="Ханшийн товч нээх"
-            title="Ханшийн товч"
-            @onclick="ToggleExpanded">
-        ↑
+        <img class="floating-money-icon" src="/images/mnt logo.png" alt="" aria-hidden="true" />
     </button>
 </div>
 
@@ -92,22 +171,45 @@
     private static readonly string[] VisibleCurrencies = ["USD", "EUR", "JPY", "CHF", "GBP", "HKD", "CNY", "KRW", "CAD", "AUD", "SGD", "NZD", "XAU", "XAG"];
     private static readonly HashSet<string> VisibleCurrencySet = VisibleCurrencies.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+    private readonly List<ChatMessage> chatMessages = [];
     private IReadOnlyList<MongolBankExchangeRateDto> rates = [];
     private ExchangeRateQuoteDto? usdBuyQuote;
     private ExchangeRateQuoteDto? usdSellQuote;
     private DateOnly? rateDate;
     private bool isLoading = true;
-    private bool isExpanded;
     private bool showPanel;
+    private bool showChatPanel;
+    private bool isChatSending;
+    private string chatQuestion = string.Empty;
+    private string? chatError;
+    private ChatMode chatMode = ChatMode.BankInfo;
+
+    private bool CanSwitchMode => CurrentUser.IsAuthenticated && CurrentUser.IsInRole("USER");
+    private bool ShowModePicker => CanSwitchMode && chatMode == ChatMode.None;
 
     private string RateDateLabel => rateDate?.ToString("yyyy.MM.dd") ?? "Огноо";
-
     private string UsdBuyRateText => usdBuyQuote is null ? string.Empty : usdBuyQuote.Rate.ToString("N0");
-
     private string UsdSellRateText => usdSellQuote?.CustomerMntPerUsdRate?.ToString("N0") ?? string.Empty;
+
+    private string ChatSubtitle => chatMode switch
+    {
+        ChatMode.PersonalFinance => "Таны санхүүгийн мэдээлэлд суурилсан туслах",
+        ChatMode.None => "Эхлэх төрлөө сонгоно уу",
+        _ => "Phoebe Bank-ийн мэдээллийн туслах"
+    };
+
+    private string ActiveModeLabel => chatMode == ChatMode.PersonalFinance
+        ? "Санхүүгийн тайлангийн чат"
+        : "Банкны үйлчилгээний чат";
+
+    private string ChatPlaceholder => chatMode == ChatMode.PersonalFinance
+        ? "Жишээ: Сүүлийн 1 сарын зарлагаа дүгнэж өгөөч"
+        : "Жишээ: Дансны өдрийн лимит хэд вэ?";
 
     protected override async Task OnInitializedAsync()
     {
+        ResetChat(ChatMode.BankInfo);
+
         var allRates = await ExchangeRateService.GetMongolBankMntRatesAsync();
         rates = allRates
             .Where(rate => VisibleCurrencySet.Contains(rate.CurrencyCode))
@@ -119,28 +221,221 @@
         isLoading = false;
     }
 
-    private void ToggleExpanded()
+    private void TogglePanel()
     {
-        isExpanded = !isExpanded;
-        if (!isExpanded)
+        showPanel = !showPanel;
+        if (showPanel)
         {
-            showPanel = false;
+            showChatPanel = false;
         }
     }
 
-    private void TogglePanel()
+    private void ToggleChatPanel()
     {
-        if (!isExpanded)
+        showChatPanel = !showChatPanel;
+        if (!showChatPanel)
         {
-            isExpanded = true;
+            return;
         }
 
-        showPanel = !showPanel;
+        showPanel = false;
+        chatError = null;
+        chatQuestion = string.Empty;
+
+        if (CanSwitchMode)
+        {
+            chatMode = ChatMode.None;
+            chatMessages.Clear();
+            return;
+        }
+
+        ResetChat(ChatMode.BankInfo);
+    }
+
+    private void SelectChatMode(ChatMode mode)
+    {
+        ResetChat(mode);
+    }
+
+    private void BackToModePicker()
+    {
+        chatMode = ChatMode.None;
+        chatMessages.Clear();
+        chatError = null;
+        chatQuestion = string.Empty;
+    }
+
+    private void ResetChat(ChatMode mode)
+    {
+        chatMode = mode;
+        chatMessages.Clear();
+        chatError = null;
+        chatQuestion = string.Empty;
+
+        var intro = mode == ChatMode.PersonalFinance
+            ? "Та Chubi AI санхүүгийн туслахтай холбогдлоо. Би таны сүүлийн 30 хоног болон сүүлийн 30 гүйлгээний мэдээлэл дээр тулгуурлан орлого, зарлага, мөнгөн урсгалын талаар тайлбарлаж өгнө."
+            : "Та Chubi AI туслахтай холбогдлоо. Та манай банкны талаарх асуултаа оруулна уу.";
+
+        chatMessages.Add(new ChatMessage("assistant", intro));
+    }
+
+    private async Task SendChatAsync()
+    {
+        var question = chatQuestion.Trim();
+        if (string.IsNullOrWhiteSpace(question) || isChatSending || chatMode == ChatMode.None)
+        {
+            return;
+        }
+
+        chatQuestion = string.Empty;
+        chatError = null;
+        isChatSending = true;
+        chatMessages.Add(new ChatMessage("user", question));
+
+        var history = chatMessages
+            .Select(message => new PublicBankChatMessageDto
+            {
+                Role = message.Role,
+                Content = message.Content
+            })
+            .ToList();
+
+        var result = chatMode == ChatMode.PersonalFinance
+            ? await SendFinanceChatAsync(question, history)
+            : await GeminiService.AskPublicBankInfoQuestionAsync(question, history);
+
+        if (result.Success && !string.IsNullOrWhiteSpace(result.Answer))
+        {
+            chatMessages.Add(new ChatMessage("assistant", result.Answer));
+        }
+        else
+        {
+            chatError = result.ErrorMessage ?? "Chubi AI хариу өгөх боломжгүй байна.";
+        }
+
+        isChatSending = false;
+    }
+
+    private async Task<(bool Success, string? Answer, string? ErrorMessage)> SendFinanceChatAsync(
+        string question,
+        IReadOnlyList<PublicBankChatMessageDto> history)
+    {
+        if (CurrentUser.UserId is null)
+        {
+            return (false, null, "Санхүүгийн тайлан авахын тулд хэрэглэгчээр нэвтэрсэн байх шаардлагатай.");
+        }
+
+        var context = await BuildFinanceContextAsync(CurrentUser.UserId.Value);
+        return await GeminiService.AskUserFinanceQuestionAsync(question, context, history);
+    }
+
+    private async Task<UserFinanceChatContextDto> BuildFinanceContextAsync(long userId)
+    {
+        var today = MongoliaClock.Today;
+        var start30 = today.AddDays(-30);
+        var start15 = today.AddDays(-15);
+        var accounts = await AccountService.GetMyAccountsAsync(userId);
+        var transactions = await TransactionService.GetMyTransactionsAsync(userId, start30, today, 500);
+        var recentTransactions = transactions
+            .OrderByDescending(transaction => transaction.CreatedAt)
+            .ThenByDescending(transaction => transaction.Id)
+            .Take(30)
+            .ToList();
+
+        return new UserFinanceChatContextDto
+        {
+            GeneratedAt = MongoliaClock.Now.ToString("yyyy-MM-dd HH:mm"),
+            PeriodStart = start30.ToString("yyyy-MM-dd"),
+            PeriodEnd = today.ToString("yyyy-MM-dd"),
+            Accounts = accounts
+                .OrderByDescending(account => account.IsPrimary)
+                .ThenBy(account => account.Currency)
+                .Select(account => new UserFinanceAccountContextDto
+                {
+                    AccountMasked = MaskAccount(account.AccountNumber),
+                    AccountType = NormalizeAccountType(account.AccountType),
+                    Currency = account.Currency,
+                    Balance = account.Balance,
+                    DailyLimitMnt = account.DailyTransactionLimitMnt,
+                    IsPrimary = account.IsPrimary,
+                    IsActive = account.IsActive
+                })
+                .ToList(),
+            Last30DaysByCurrency = BuildCurrencySummary(transactions),
+            Last15DaysByCurrency = BuildCurrencySummary(transactions.Where(transaction => DateOnly.FromDateTime(transaction.CreatedAt) >= start15)),
+            RecentTransactions = recentTransactions
+                .Select(transaction => new UserFinanceTransactionContextDto
+                {
+                    TransactionId = transaction.Id,
+                    CreatedAt = transaction.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
+                    Direction = transaction.Direction == "RECEIVED" ? "Орлого" : "Зарлага",
+                    FromAccountMasked = MaskAccount(transaction.FromAccountNumber),
+                    ToAccountMasked = MaskAccount(transaction.ToAccountNumber),
+                    Amount = transaction.Amount,
+                    SourceCurrency = transaction.SourceCurrency,
+                    CreditedAmount = transaction.CreditedAmount,
+                    TargetCurrency = transaction.TargetCurrency,
+                    Description = transaction.Description,
+                    Status = transaction.Status
+                })
+                .ToList()
+        };
+    }
+
+    private static List<UserFinanceCurrencySummaryDto> BuildCurrencySummary(IEnumerable<BankWebApp.Web.DTOs.Transactions.UserTransactionDto> transactions)
+    {
+        var summaries = new Dictionary<string, UserFinanceCurrencySummaryDto>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var transaction in transactions)
+        {
+            var isIncome = string.Equals(transaction.Direction, "RECEIVED", StringComparison.OrdinalIgnoreCase);
+            var currency = isIncome ? transaction.TargetCurrency : transaction.SourceCurrency;
+            if (!summaries.TryGetValue(currency, out var summary))
+            {
+                summary = new UserFinanceCurrencySummaryDto { Currency = currency };
+                summaries[currency] = summary;
+            }
+
+            if (isIncome)
+            {
+                summary.Income += transaction.CreditedAmount;
+                summary.IncomeCount += 1;
+            }
+            else
+            {
+                summary.Expense += transaction.Amount;
+                summary.ExpenseCount += 1;
+            }
+        }
+
+        foreach (var summary in summaries.Values)
+        {
+            summary.Net = summary.Income - summary.Expense;
+        }
+
+        return summaries.Values
+            .OrderBy(summary => summary.Currency)
+            .ToList();
     }
 
     private static string FormatOfficialRate(MongolBankExchangeRateDto rate)
     {
-        return rate.MntRate.ToString(rate.CurrencyCode is "XAU" or "XAG" ? "N2" : "N2");
+        return rate.MntRate.ToString("N2");
+    }
+
+    private static string MaskAccount(string accountNumber)
+    {
+        var normalized = accountNumber.Trim();
+        return normalized.Length <= 4
+            ? normalized
+            : $"{normalized[..4]}****{normalized[^4..]}";
+    }
+
+    private static string NormalizeAccountType(string accountType)
+    {
+        return string.Equals(accountType, "CHECKING", StringComparison.OrdinalIgnoreCase)
+            ? "Харилцах"
+            : accountType;
     }
 
     private static string GetCurrencyName(string currencyCode)
@@ -164,4 +459,13 @@
             _ => currencyCode
         };
     }
+
+    private enum ChatMode
+    {
+        None,
+        BankInfo,
+        PersonalFinance
+    }
+
+    private sealed record ChatMessage(string Role, string Content);
 }

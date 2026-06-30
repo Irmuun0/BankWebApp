@@ -10,6 +10,7 @@ public class AdminAccountDto
     public string AccountType { get; set; } = string.Empty;
     public string Currency { get; set; } = string.Empty;
     public decimal Balance { get; set; }
+    public decimal DailyTransactionLimitMnt { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
 }

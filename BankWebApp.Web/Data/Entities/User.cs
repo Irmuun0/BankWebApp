@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace BankWebApp.Web.Data.Entities;
@@ -52,6 +52,8 @@ public partial class User
     public DateTime UpdatedAt { get; set; }
 
     public virtual ICollection<Account> Accounts { get; set; } = new List<Account>();
+
+    public virtual ICollection<AccountTransactionLimitHistory> AccountTransactionLimitHistories { get; set; } = new List<AccountTransactionLimitHistory>();
 
     public virtual ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
 

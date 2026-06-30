@@ -11,10 +11,6 @@
 
 <PageTitle>Гүйлгээ хийх</PageTitle>
 
-<div class="mb-3">
-    <a class="btn btn-outline-secondary" href="/dashboard">Буцах</a>
-</div>
-
 <h1>Гүйлгээ хийх</h1>
 
 @if (!string.IsNullOrWhiteSpace(Error))
@@ -86,6 +82,13 @@ else
             @if (SelectedFromAccount is not null)
             {
                 <div class="small text-muted mt-1">Үлдэгдэл: @SelectedFromAccount.Balance.ToString("N2") @SelectedFromAccount.Currency</div>
+                <div class="small mt-1 @(IsTransferLimitExceeded ? "text-danger" : "text-muted")">
+                    Өдрийн гүйлгээний лимит: @SelectedFromAccount.DailyTransactionLimitMnt.ToString("N2") MNT
+                </div>
+                @if (IsTransferLimitExceeded)
+                {
+                    <div class="small text-danger mt-1">Оруулсан дүн энэ дансны өдрийн лимитээс давсан байна.</div>
+                }
             }
         </div>
 
@@ -230,7 +233,7 @@ else
             </div>
         </div>
 
-        <button class="btn btn-primary" type="submit">Гүйлгээ хийх</button>
+        <button class="btn btn-primary" type="submit" disabled="@IsTransferLimitExceeded">Гүйлгээ хийх</button>
         <a class="btn btn-link" href="/transactions">Гүйлгээний түүх</a>
     </form>
 }
@@ -275,6 +278,10 @@ else
         ? EnteredAmount
         : TruncateMoney(EnteredAmount * exchangeRateQuote.Rate);
     private bool IsConvertedReceiveAmountTooSmall => exchangeRateQuote is not null && EnteredAmount > 0 && ConvertedReceiveAmount < 1m;
+    private bool IsTransferLimitExceeded =>
+        SelectedFromAccount is not null &&
+        string.Equals(SelectedFromAccount.Currency, "MNT", StringComparison.OrdinalIgnoreCase) &&
+        EnteredAmount > SelectedFromAccount.DailyTransactionLimitMnt;
     private bool ShowDescriptionWarning => string.IsNullOrWhiteSpace(transactionDescription);
     private string SelectedFromAccountCurrency => string.IsNullOrWhiteSpace(selectedFromAccountCurrency) ? "Валют" : selectedFromAccountCurrency;
     private string SelectedFromAccountValue => selectedFromAccountId?.ToString() ?? string.Empty;

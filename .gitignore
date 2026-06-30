@@ -3,6 +3,13 @@ obj/
 .vs/
 .vscode/
 App_Data/DataProtectionKeys/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.env
+.env.*
 *.user
 *.suo
 appsettings.Development.json

@@ -6,8 +6,10 @@
 <PageTitle>Админ - Данснууд</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>Данснууд</h1>
-    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
+    <div>
+        <h1 class="mb-0">Данснууд</h1>
+        <div class="text-muted">Дансны төлөв, эзэмшигч болон өдрийн гүйлгээний лимит</div>
+    </div>
 </div>
 
 @if (!string.IsNullOrWhiteSpace(Success))
@@ -45,7 +47,7 @@ else
 }
 else if (!isLoading)
 {
-    <table class="table table-striped align-middle">
+    <table class="table table-striped align-middle" data-client-sort="true">
         <thead>
             <tr>
                 <th>Эзэмшигч</th>
@@ -53,6 +55,7 @@ else if (!isLoading)
                 <th>Төрөл</th>
                 <th>Валют</th>
                 <th>Үлдэгдэл</th>
+                <th>Өдрийн лимит</th>
                 <th>Төлөв</th>
                 <th>Нээсэн огноо</th>
                 <th></th>
@@ -69,20 +72,33 @@ else if (!isLoading)
                     <td>@account.AccountNumber</td>
                     <td>@DisplayAccountType(account.AccountType)</td>
                     <td>@account.Currency</td>
-                    <td>@account.Balance.ToString("N2")</td>
+                    <td class="money-stack">
+                        <span class="money-amount">@account.Balance.ToString("N2")</span>
+                        <span class="money-currency">@account.Currency</span>
+                    </td>
+                    <td>
+                        <span>@account.DailyTransactionLimitMnt.ToString("N2")</span>
+                        <span class="small text-muted d-block">MNT</span>
+                    </td>
                     <td>@DisplayActive(account.IsActive)</td>
                     <td>@account.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                     <td class="text-end">
-                        <form method="post" action="/admin/accounts/toggle-status">
-                            <input type="hidden" name="AccountId" value="@account.Id" />
-                            <input type="hidden" name="IsActive" value="@(!account.IsActive)" />
-                            <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
-                            <button class="btn p-0 border-0 bg-transparent" type="submit" title="Төлөв солих">
-                                <span class="d-inline-flex align-items-center rounded-pill p-1 @(account.IsActive ? "bg-success" : "bg-secondary")" style="width: 44px;">
-                                    <span class="bg-white rounded-circle d-inline-block @(account.IsActive ? "ms-auto" : "")" style="width: 18px; height: 18px;"></span>
-                                </span>
-                            </button>
-                        </form>
+                        <div class="d-inline-flex gap-2 align-items-center">
+                            <a class="btn btn-sm btn-outline-primary"
+                               href="@BuildLimitModalUrl(account.Id)">
+                                Өдрийн лимит тохируулах
+                            </a>
+                            <form method="post" action="/admin/accounts/toggle-status">
+                                <input type="hidden" name="AccountId" value="@account.Id" />
+                                <input type="hidden" name="IsActive" value="@(!account.IsActive)" />
+                                <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
+                                <button class="btn p-0 border-0 bg-transparent" type="submit" title="Төлөв солих">
+                                    <span class="d-inline-flex align-items-center rounded-pill p-1 @(account.IsActive ? "bg-success" : "bg-secondary")" style="width: 44px;">
+                                        <span class="bg-white rounded-circle d-inline-block @(account.IsActive ? "ms-auto" : "")" style="width: 18px; height: 18px;"></span>
+                                    </span>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
             }
@@ -92,8 +108,105 @@ else if (!isLoading)
     <AdminPager BasePath="/admin/accounts" Page="@accounts.Page" TotalPages="@accounts.TotalPages" Search="@Search" />
 }
 
+@if (limitDetails is not null)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2 class="modal-title h5 mb-0">Өдрийн гүйлгээний лимит тохируулах</h2>
+                        <div class="text-muted small">
+                            @limitDetails.AccountNumber · @limitDetails.Currency · @(limitDetails.OwnerName ?? "-")
+                        </div>
+                    </div>
+                    <a class="btn-close" href="@CloseLimitModalUrl" aria-label="Хаах"></a>
+                </div>
+                <form method="post" action="/admin/accounts/transaction-limit">
+                    <div class="modal-body">
+                        <input type="hidden" name="AccountId" value="@limitDetails.AccountId" />
+                        <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
+
+                        <div class="alert alert-light border">
+                            Одоогийн өдрийн лимит:
+                            <strong>
+                                @limitDetails.CurrentDailyLimitMnt.ToString("N2") MNT
+                            </strong>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="limitAmount">Өдрийн нийт гарах гүйлгээний лимит</label>
+                                <div class="input-group">
+                                    <input class="form-control"
+                                           id="limitAmount"
+                                           name="LimitAmount"
+                                           type="number"
+                                           min="0.01"
+                                           step="0.01"
+                                           value="@FormatLimitValue(limitDetails.CurrentDailyLimitMnt)"
+                                           placeholder="Ж: 50000000" />
+                                    <span class="input-group-text">MNT</span>
+                                </div>
+                                <div class="form-text">Хэрэглэгч энэ данснаас тухайн өдөрт нийтдээ энэ MNT equivalent дүнгээс их гүйлгээ хийх боломжгүй.</div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label" for="limitReason">Тайлбар</label>
+                                <textarea class="form-control" id="limitReason" name="Reason" rows="3" maxlength="500"
+                                          placeholder="Ж: Харилцагчийн хүсэлтээр нэмэгдүүлэв"></textarea>
+                            </div>
+                        </div>
+
+                        <hr />
+
+                        <h3 class="h6">Өмнөх тохиргооны түүх</h3>
+                        @if (limitDetails.Histories.Count == 0)
+                        {
+                            <p class="text-muted mb-0">Одоогоор лимит өөрчилсөн түүх байхгүй.</p>
+                        }
+                        else
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Огноо</th>
+                                            <th>Өмнөх</th>
+                                            <th>Шинэ</th>
+                                            <th>Админ</th>
+                                            <th>Тайлбар</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var history in limitDetails.Histories)
+                                        {
+                                            <tr>
+                                                <td>@history.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                                <td>@FormatHistoryLimit(history.OldLimitAmount)</td>
+                                                <td>@FormatHistoryLimit(history.NewLimitAmount)</td>
+                                                <td>@(history.ChangedByUsername ?? "-")</td>
+                                                <td>@(string.IsNullOrWhiteSpace(history.Reason) ? "-" : history.Reason)</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <a class="btn btn-outline-secondary" href="@CloseLimitModalUrl">Болих</a>
+                        <button class="btn btn-primary" type="submit">Хадгалах</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private AdminPagedResultDto<AdminAccountDto> accounts = new();
+    private AdminAccountLimitDetailsDto? limitDetails;
     private bool isLoading = true;
 
     [SupplyParameterFromQuery]
@@ -108,13 +221,67 @@ else if (!isLoading)
     [SupplyParameterFromQuery]
     public string? Error { get; set; }
 
+    [SupplyParameterFromQuery]
+    public long? LimitAccountId { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         accounts = await AdminService.GetAccountsAsync(Search, Page);
+        if (LimitAccountId is not null)
+        {
+            limitDetails = await AdminService.GetAccountLimitDetailsAsync(LimitAccountId.Value);
+        }
+
         isLoading = false;
     }
 
     private string CurrentPageUrl => "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+
+    private string CloseLimitModalUrl
+    {
+        get
+        {
+            var query = new List<string>();
+            if (!string.IsNullOrWhiteSpace(Search))
+            {
+                query.Add($"search={Uri.EscapeDataString(Search)}");
+            }
+
+            if (Page > 1)
+            {
+                query.Add($"page={Page}");
+            }
+
+            return query.Count == 0 ? "/admin/accounts" : $"/admin/accounts?{string.Join("&", query)}";
+        }
+    }
+
+    private string BuildLimitModalUrl(long accountId)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrWhiteSpace(Search))
+        {
+            query.Add($"search={Uri.EscapeDataString(Search)}");
+        }
+
+        if (Page > 1)
+        {
+            query.Add($"page={Page}");
+        }
+
+        query.Add($"limitAccountId={accountId}");
+        return $"/admin/accounts?{string.Join("&", query)}";
+    }
+
+    private static string FormatLimitValue(decimal value)
+    {
+        return value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatHistoryLimit(decimal? value)
+    {
+        return value is decimal amount ? $"{amount:N2} MNT" : "-";
+    }
 
     private static string DisplayAccountType(string accountType)
     {

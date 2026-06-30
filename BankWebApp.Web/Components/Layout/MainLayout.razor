@@ -1,54 +1,118 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject NavigationManager Navigation
+@using BlazorBootstrap
 
 <div class="page">
     <main>
         <AuthorizeView>
             <Authorized Context="authContext">
-                <div class="top-row px-4 justify-content-end align-items-center gap-2">
-                    <SessionExpiryMonitor />
-                    <NotificationBell />
-                    <details class="dropdown">
-                        <summary class="btn btn-link text-decoration-none d-flex align-items-center gap-2">
-                            <span class="rounded-circle bg-secondary text-white d-inline-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
-                                @GetInitial(authContext.User)
-                            </span>
-                            <span>▼</span>
-                        </summary>
-                        <div class="border rounded bg-white p-2 position-absolute end-0 mt-2" style="min-width: 210px; z-index: 1000;">
-                            <div class="px-2 py-1 text-muted small">@GetDisplayName(authContext.User)</div>
-                            @if (authContext.User.IsInRole("ADMIN"))
-                            {
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/dashboard">Админ самбар</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/users">Хэрэглэгчид</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/accounts">Данснууд</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/transactions">Бүх гүйлгээ</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/ai-detection">AI Detection</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/exchange-rates">Ханш тохируулах</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/fx-income">FX орлогын тайлан</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/suspicious-transactions">Сэжигтэй гүйлгээ</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/suspicious-detection-report">Detection тайлан</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/fraud-rules">Fraud rule тохиргоо</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/admin/audit-logs">Audit log</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/dashboard">Хэрэглэгчийн самбар</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/accounts">Миний дансууд</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/transactions">Гүйлгээний түүх</a>
-                            }
-                            else
-                            {
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/dashboard">Хэрэглэгчийн самбар</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/accounts">Миний дансууд</a>
-                                <a class="dropdown-item d-block px-2 py-1 text-decoration-none" href="/transactions">Гүйлгээний түүх</a>
-                            }
-                            <form method="post" action="/auth/logout">
-                                <button class="dropdown-item btn btn-link d-block px-2 py-1 text-start text-decoration-none" type="submit">Гарах</button>
-                            </form>
+                @if (ShowAuthenticatedShell)
+                {
+                    var isAdmin = authContext.User.IsInRole("ADMIN");
+                    var navLabel = isAdmin ? "Админ удирдлагын цэс" : "Хэрэглэгчийн цэс";
+                    var pageTitle = GetCurrentPageTitle(isAdmin);
+                    var pageSubtitle = GetCurrentPageSubtitle(isAdmin);
+                    var backHref = GetBackHref(isAdmin);
+
+                    <input id="app-nav-toggle" class="app-nav-toggle" type="checkbox" />
+                    <label class="app-nav-overlay" for="app-nav-toggle" aria-hidden="true"></label>
+                    <aside class="app-sidebar @(isAdmin ? "app-sidebar-admin" : "app-sidebar-user")" aria-label="@navLabel">
+                        <div class="app-sidebar-brand">
+                            <img class="app-brand-logo" src="/images/brand/phoebe-logo-sidebar.png" alt="Phoebe bank" />
+                            <div class="app-brand-context">
+                                <div class="app-brand-title">@(isAdmin ? "Admin console" : "Digital bank")</div>
+                            </div>
                         </div>
-                    </details>
-                </div>
+
+                        @if (isAdmin)
+                        {
+                            <nav class="app-sidebar-nav" aria-label="Админ navigation">
+                                <div class="app-nav-section">Банкны удирдлага</div>
+                                <NavLink class="app-nav-link" href="/admin/dashboard" Match="NavLinkMatch.All"><span class="app-nav-icon">H</span><span>Админ самбар</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/users" Match="NavLinkMatch.All"><span class="app-nav-icon">U</span><span>Хэрэглэгчид</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/accounts" Match="NavLinkMatch.All"><span class="app-nav-icon">A</span><span>Данснууд</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/transactions" Match="NavLinkMatch.All"><span class="app-nav-icon">Tx</span><span>Бүх гүйлгээ</span></NavLink>
+
+                                <div class="app-nav-section">AI & Risk</div>
+                                <NavLink class="app-nav-link app-nav-link-primary" href="/admin/ai-detection" Match="NavLinkMatch.All"><span class="app-nav-icon">AI</span><span>AI Detection</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/suspicious-transactions" Match="NavLinkMatch.All"><span class="app-nav-icon">!</span><span>Сэжигтэй гүйлгээ</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/suspicious-detection-report" Match="NavLinkMatch.All"><span class="app-nav-icon">Rpt</span><span>Detection тайлан</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/fraud-rules" Match="NavLinkMatch.All"><span class="app-nav-icon">R</span><span>Fraud rule</span></NavLink>
+
+                                <div class="app-nav-section">Ханш ба audit</div>
+                                <NavLink class="app-nav-link" href="/admin/exchange-rates" Match="NavLinkMatch.All"><span class="app-nav-icon">$</span><span>Ханш тохируулах</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/fx-income" Match="NavLinkMatch.All"><span class="app-nav-icon">FX</span><span>FX орлогын тайлан</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/audit-logs" Match="NavLinkMatch.All"><span class="app-nav-icon">Log</span><span>Audit log</span></NavLink>
+                            </nav>
+                        }
+                        else
+                        {
+                            <nav class="app-sidebar-nav" aria-label="Хэрэглэгчийн navigation">
+                                <div class="app-nav-section">Миний банк</div>
+                                <NavLink class="app-nav-link app-nav-link-primary" href="/dashboard" Match="NavLinkMatch.All"><span class="app-nav-icon">H</span><span>Самбар</span></NavLink>
+                                <NavLink class="app-nav-link" href="/accounts" Match="NavLinkMatch.All"><span class="app-nav-icon">A</span><span>Миний дансууд</span></NavLink>
+                                <NavLink class="app-nav-link" href="/accounts/settings" Match="NavLinkMatch.All"><span class="app-nav-icon">S</span><span>Дансны тохиргоо</span></NavLink>
+
+                                <div class="app-nav-section">Гүйлгээ</div>
+                                <NavLink class="app-nav-link app-nav-link-primary" href="/transactions/create" Match="NavLinkMatch.All"><span class="app-nav-icon">+</span><span>Гүйлгээ хийх</span></NavLink>
+                                <NavLink class="app-nav-link" href="/transactions" Match="NavLinkMatch.All"><span class="app-nav-icon">Tx</span><span>Гүйлгээний түүх</span></NavLink>
+                                <NavLink class="app-nav-link" href="/accounts/open" Match="NavLinkMatch.All"><span class="app-nav-icon">+</span><span>Данс нээх</span></NavLink>
+                            </nav>
+                        }
+                    </aside>
+
+                    <div class="top-row px-4 align-items-center gap-2">
+                        <label class="app-nav-mobile-button" for="app-nav-toggle" aria-label="Цэс нээх"><span></span><span></span><span></span></label>
+                        @if (backHref is not null)
+                        {
+                            <a class="app-header-back" href="@backHref" aria-label="Буцах">
+                                <svg class="app-header-back-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                                    <path d="M10.5 3.5 6 8l4.5 4.5M6.5 8h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </a>
+                        }
+                        <div class="top-page-heading">
+                            <div class="top-page-title">@pageTitle</div>
+                            <div class="top-page-subtitle">@pageSubtitle</div>
+                        </div>
+                        <SessionExpiryMonitor />
+                        <NotificationBell />
+                        <div class="app-user-identity" title="@GetDisplayName(authContext.User)">@GetMaskedDisplayName(authContext.User)</div>
+                        <details class="dropdown app-user-menu">
+                            <summary class="app-user-summary" aria-label="Хэрэглэгчийн цэс">
+                                <span class="app-menu-button" aria-hidden="true">
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                    <span></span>
+                                </span>
+                            </summary>
+                            <div class="app-user-dropdown">
+                                <div class="app-user-dropdown-name">@GetDisplayName(authContext.User)</div>
+                                <a class="dropdown-item" href="/profile">Хувийн мэдээлэл</a>
+                                @if (isAdmin)
+                                {
+                                    <a class="dropdown-item" href="/dashboard">Хэрэглэгчийн самбар</a>
+                                    <a class="dropdown-item" href="/accounts">Миний дансууд</a>
+                                    <a class="dropdown-item" href="/transactions">Гүйлгээний түүх</a>
+                                }
+                                else
+                                {
+                                    <a class="dropdown-item" href="/dashboard">Самбар</a>
+                                    <a class="dropdown-item" href="/accounts">Миний дансууд</a>
+                                    <a class="dropdown-item" href="/transactions">Гүйлгээний түүх</a>
+                                }
+                                <form method="post" action="/auth/logout">
+                                    <button class="dropdown-item app-logout-button" type="submit">Гарах</button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
+                }
             </Authorized>
         </AuthorizeView>
 
-        <article class="content px-4">
+        <article class="content px-4 @(ShowAuthenticatedShell ? "with-auth-shell" : "public-content")">
             @Body
         </article>
     </main>
@@ -57,21 +121,131 @@
 <FloatingExchangeRates />
 
 @code {
+    private bool ShowAuthenticatedShell => !IsPublicEntryPage;
+
+    private bool IsPublicEntryPage
+    {
+        get
+        {
+            var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/').ToLowerInvariant();
+            return string.IsNullOrWhiteSpace(relativePath)
+                || relativePath is "login"
+                || relativePath is "admin/login"
+                || relativePath is "access-denied"
+                || relativePath is "not-found";
+        }
+    }
+
+    private string CurrentRoute => Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/').ToLowerInvariant();
+
+    private string? GetBackHref(bool isAdmin) => CurrentRoute switch
+    {
+        "dashboard" or "admin/dashboard" => null,
+        "profile" => isAdmin ? "/admin/dashboard" : "/dashboard",
+        "accounts" or "transactions" or "accounts/open" or "transactions/create" => "/dashboard",
+        "accounts/settings" => "/accounts",
+        _ when CurrentRoute.StartsWith("accounts/") => "/accounts",
+        "admin/users"
+            or "admin/accounts"
+            or "admin/transactions"
+            or "admin/ai-detection"
+            or "admin/suspicious-transactions"
+            or "admin/suspicious-detection-report"
+            or "admin/fraud-rules"
+            or "admin/exchange-rates"
+            or "admin/fx-income"
+            or "admin/audit-logs" => "/admin/dashboard",
+        _ when CurrentRoute.StartsWith("admin/suspicious-transactions/") => "/admin/suspicious-transactions",
+        _ => isAdmin ? "/admin/dashboard" : "/dashboard"
+    };
+
+    private string GetCurrentPageTitle(bool isAdmin) => CurrentRoute switch
+    {
+        "admin/dashboard" => "Админ самбар",
+        "admin/ai-detection" => "AI Detection",
+        "admin/suspicious-transactions" => "Сэжигтэй гүйлгээ",
+        "admin/suspicious-detection-report" => "Detection тайлан",
+        "admin/fraud-rules" => "Fraud rule тохиргоо",
+        "admin/users" => "Хэрэглэгчид",
+        "admin/accounts" => "Данснууд",
+        "admin/transactions" => "Бүх гүйлгээ",
+        "admin/exchange-rates" => "Ханш тохируулах",
+        "admin/fx-income" => "FX орлогын тайлан",
+        "admin/audit-logs" => "Audit log",
+        "profile" => "Хувийн мэдээлэл",
+        "dashboard" => "Хэрэглэгчийн самбар",
+        "accounts" => "Миний дансууд",
+        "accounts/settings" => "Дансны тохиргоо",
+        "accounts/open" => "Данс нээх",
+        "transactions" => "Гүйлгээний түүх",
+        "transactions/create" => "Гүйлгээ хийх",
+        _ when CurrentRoute.StartsWith("accounts/") => "Дансны дэлгэрэнгүй",
+        _ when CurrentRoute.StartsWith("admin/suspicious-transactions/") => "Сэжигтэй гүйлгээний дэлгэрэнгүй",
+        _ => isAdmin ? "Админ самбар" : "Хэрэглэгчийн самбар"
+    };
+
+    private string GetCurrentPageSubtitle(bool isAdmin) => CurrentRoute switch
+    {
+        "admin/ai-detection" => "Гүйлгээг шүүж AI шинжилгээ хийх хэсэг",
+        "admin/suspicious-transactions" => "Review action, notification, audit workflow",
+        "admin/suspicious-detection-report" => "Score, rule, review status болон хугацааны тайлан",
+        "admin/fraud-rules" => "Rule threshold, score, enable/disable тохиргоо",
+        "admin/exchange-rates" => "Банкны авах, зарах ханшийн удирдлага",
+        "admin/fx-income" => "Ханшийн зөрүүнээс үүссэн орлогын тайлан",
+        "admin/audit-logs" => "Security event, admin action, fraud action бүртгэл",
+        "profile" => "Нэвтрэх мэдээлэл, холбоо барих утас, нууц үгийн тохиргоо",
+        "admin/users" => "Хэрэглэгчийн бүртгэл, төлөв, хяналт",
+        "admin/accounts" => "Дансны төлөв, лимит, эзэмшигчийн мэдээлэл",
+        "admin/transactions" => "Системийн бүх гүйлгээний жагсаалт",
+        "dashboard" => "Данс, үлдэгдэл, сүүлийн гүйлгээний товч харагдац",
+        "accounts" => "Дансны жагсаалт болон үндсэн дансны тохиргоо",
+        "accounts/settings" => "Идэвхтэй болон идэвхгүй дансны удирдлага",
+        "accounts/open" => "Шинэ харилцах данс нээх",
+        "transactions" => "Сонгосон дансны гүйлгээний түүх",
+        "transactions/create" => "Өөрийн болон бусдын данс руу шилжүүлэг хийх",
+        _ when CurrentRoute.StartsWith("accounts/") => "Дансны үндсэн мэдээлэл болон төлөв",
+        _ when CurrentRoute.StartsWith("admin/suspicious-transactions/") => "Review action, notification, audit workflow",
+        _ => isAdmin ? "Admin workflow-ийн төв" : "Өдөр тутмын банкны үйлдлүүд"
+    };
+
     private static string GetDisplayName(System.Security.Claims.ClaimsPrincipal user)
     {
         var fullName = user.FindFirst("FullName")?.Value;
-        return string.IsNullOrWhiteSpace(fullName) ? user.Identity?.Name ?? "Admin" : fullName;
+        return string.IsNullOrWhiteSpace(fullName) ? user.Identity?.Name ?? "User" : fullName.Trim();
+    }
+
+    private static string GetMaskedDisplayName(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var name = GetDisplayName(user);
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+        {
+            return name;
+        }
+
+        return $"{parts[0]} {MaskSurname(string.Join(' ', parts.Skip(1)))}";
+    }
+
+    private static string MaskSurname(string surname)
+    {
+        var chars = surname.Trim().ToCharArray();
+        if (chars.Length <= 2)
+        {
+            return surname;
+        }
+
+        return $"{chars[0]}{new string('*', chars.Length - 2)}{chars[^1]}";
     }
 
     private static string GetInitial(System.Security.Claims.ClaimsPrincipal user)
     {
         var displayName = GetDisplayName(user).Trim();
-        return string.IsNullOrEmpty(displayName) ? "A" : displayName[..1].ToUpperInvariant();
+        return string.IsNullOrEmpty(displayName) ? "U" : displayName[..1].ToUpperInvariant();
     }
 }
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    Алдаа гарлаа.
+    <a href="." class="reload">Дахин ачаалах</a>
+    <span class="dismiss">×</span>
 </div>

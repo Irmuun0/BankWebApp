@@ -7,6 +7,8 @@ public interface IAdminService
     Task<AdminDashboardSummaryDto> GetDashboardSummaryAsync(CancellationToken cancellationToken = default);
     Task<AdminPagedResultDto<AdminUserDto>> GetUsersAsync(string? search = null, int page = 1, int pageSize = 20, CancellationToken cancellationToken = default);
     Task<AdminPagedResultDto<AdminAccountDto>> GetAccountsAsync(string? search = null, int page = 1, int pageSize = 20, CancellationToken cancellationToken = default);
+    Task<AdminAccountLimitDetailsDto?> GetAccountLimitDetailsAsync(long accountId, CancellationToken cancellationToken = default);
+    Task<(bool Success, string? ErrorMessage)> UpdateAccountTransactionLimitAsync(long adminUserId, UpdateAccountTransactionLimitDto dto, CancellationToken cancellationToken = default);
     Task<AdminPagedResultDto<AdminTransactionDto>> GetTransactionsAsync(string? search = null, int page = 1, int pageSize = 20, CancellationToken cancellationToken = default);
     Task<AdminPagedResultDto<AdminAuditLogDto>> GetAuditLogsAsync(string? source = null, string? search = null, DateOnly? startDate = null, DateOnly? endDate = null, int page = 1, int pageSize = 25, CancellationToken cancellationToken = default);
     Task<AdminAiDetectionPageDto> GetAiDetectionPageAsync(string? search = null, string? username = null, string? currency = null, decimal? minRiskScore = null, DateOnly? startDate = null, DateOnly? endDate = null, long? chatTransactionId = null, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
@@ -23,6 +25,7 @@ public interface IAdminService
     Task<(bool Success, string? ErrorMessage)> UpdateFraudDetectionSettingsAsync(long adminUserId, UpdateFraudDetectionSettingsDto dto, CancellationToken cancellationToken = default);
     Task<AdminPagedResultDto<AdminSuspiciousTransactionDto>> GetSuspiciousTransactionsAsync(string? search = null, string? reviewStatus = null, int page = 1, int pageSize = 20, CancellationToken cancellationToken = default);
     Task<AdminSuspiciousTransactionDto?> GetSuspiciousTransactionDetailAsync(long transactionId, CancellationToken cancellationToken = default);
+    Task<(bool Success, string? ErrorMessage)> EnsureSuspiciousReviewAsync(long adminUserId, long transactionId, CancellationToken cancellationToken = default);
     Task<(bool Success, string? ErrorMessage)> UpdateSuspiciousReviewAsync(long adminUserId, UpdateSuspiciousReviewDto dto, CancellationToken cancellationToken = default);
     Task<(bool Success, string? ErrorMessage)> SetUserActiveStatusAsync(long adminUserId, long userId, bool isActive, CancellationToken cancellationToken = default);
     Task<(bool Success, string? ErrorMessage)> SetAccountActiveStatusAsync(long adminUserId, long accountId, bool isActive, CancellationToken cancellationToken = default);

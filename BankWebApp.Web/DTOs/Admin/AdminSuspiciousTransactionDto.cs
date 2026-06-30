@@ -3,8 +3,14 @@ namespace BankWebApp.Web.DTOs.Admin;
 public class AdminSuspiciousTransactionDto
 {
     public long TransactionId { get; set; }
+    public long FromAccountId { get; set; }
     public string FromAccountNumber { get; set; } = string.Empty;
+    public long FromUserId { get; set; }
+    public string FromUserName { get; set; } = string.Empty;
+    public long ToAccountId { get; set; }
     public string ToAccountNumber { get; set; } = string.Empty;
+    public long ToUserId { get; set; }
+    public string ToUserName { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public string SourceCurrency { get; set; } = string.Empty;
     public decimal CreditedAmount { get; set; }

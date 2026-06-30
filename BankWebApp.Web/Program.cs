@@ -8,12 +8,14 @@ using BankWebApp.Web.DTOs.Auth;
 using BankWebApp.Web.DTOs.Accounts;
 using BankWebApp.Web.DTOs.Admin;
 using BankWebApp.Web.DTOs.Transactions;
+using BankWebApp.Web.DTOs.Profile;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using System.Globalization;
 using System.Security.Claims;
+using BlazorBootstrap;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,6 +33,7 @@ builder.Services.AddDataProtection()
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddBlazorBootstrap();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -59,6 +62,7 @@ builder.Services.AddTransient<ITransactionService, TransactionService>();
 builder.Services.AddTransient<IAdminService, AdminService>();
 builder.Services.AddTransient<INotificationService, NotificationService>();
 builder.Services.AddTransient<IPasswordPolicyService, PasswordPolicyService>();
+builder.Services.AddTransient<IProfileService, ProfileService>();
 builder.Services.AddTransient<ISecurityEventService, SecurityEventService>();
 builder.Services.AddTransient<IDatabaseClockService, DatabaseClockService>();
 builder.Services.AddTransient<IDatabaseTestService, DatabaseTestService>();
@@ -87,13 +91,37 @@ app.Use(async (context, next) =>
     var isUserPath = path.StartsWithSegments("/dashboard");
     var isAccountPath = path.StartsWithSegments("/accounts");
     var isTransactionPath = path.StartsWithSegments("/transactions");
+    var isProfilePath = path.StartsWithSegments("/profile");
+    var isProtectedPath = (isAdminPath && !isAdminLoginPath) || isUserPath || isAccountPath || isTransactionPath || isProfilePath;
 
-    if (((isAdminPath && !isAdminLoginPath) || isUserPath || isAccountPath || isTransactionPath) && context.User.Identity?.IsAuthenticated != true)
+    if (isProtectedPath && context.User.Identity?.IsAuthenticated != true)
     {
         var returnUrl = context.Request.PathBase + context.Request.Path + context.Request.QueryString;
-        var loginPath = isAdminPath ? "/admin/login" : "/";
-        context.Response.Redirect($"{loginPath}?returnUrl={Uri.EscapeDataString(returnUrl)}");
+        var loginPath = isAdminPath ? "/?login=admin" : "/?login=user";
+        context.Response.Redirect(AppendQuery(loginPath, "returnUrl", returnUrl));
         return;
+    }
+
+    if (isProtectedPath && context.User.Identity?.IsAuthenticated == true)
+    {
+        var userIdValue = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (long.TryParse(userIdValue, out var signedInUserId))
+        {
+            var dbContext = context.RequestServices.GetRequiredService<BankDbContext>();
+            var isActive = await dbContext.Users
+                .AsNoTracking()
+                .Where(user => user.Id == signedInUserId)
+                .Select(user => user.IsActive)
+                .FirstOrDefaultAsync();
+
+            if (!isActive)
+            {
+                await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                var loginMode = isAdminPath ? "admin" : "user";
+                context.Response.Redirect($"/?login={loginMode}&error=Таны нэвтрэх эрх идэвхгүй болсон байна.");
+                return;
+            }
+        }
     }
 
     if (isAdminPath && !isAdminLoginPath && !context.User.IsInRole("ADMIN"))
@@ -166,6 +194,61 @@ app.MapPost("/auth/login", async (HttpContext context, IAuthService authService,
 
     return Results.Redirect(GetSafeLocalUrl(returnUrl, fallbackUrl));
 });
+
+app.MapPost("/profile/update", async (HttpContext context, IProfileService profileService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var userId))
+    {
+        return Results.Redirect($"/?error={Uri.EscapeDataString("Та нэвтрээгүй байна.")}");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/profile");
+    var result = await profileService.UpdateProfileAsync(
+        userId,
+        new UpdateProfileDto
+        {
+            Username = form["Username"].ToString(),
+            Email = form["Email"].ToString(),
+            PhoneNumber = form["PhoneNumber"].ToString(),
+            EmergencyPhoneNumber = form["EmergencyPhoneNumber"].ToString(),
+            CurrentPassword = form["CurrentPassword"].ToString(),
+            NewPassword = form["NewPassword"].ToString(),
+            ConfirmPassword = form["ConfirmPassword"].ToString()
+        },
+        cancellationToken);
+
+    if (!result.Success || result.Profile is null)
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", result.ErrorMessage ?? "Хувийн мэдээлэл шинэчлэх үед алдаа гарлаа."));
+    }
+
+    var profile = result.Profile;
+    var role = context.User.FindFirstValue(ClaimTypes.Role) ?? profile.Role;
+    var expiresUtc = GetCurrentSessionExpiry(context, role);
+    var fullName = $"{profile.FirstName} {profile.LastName}".Trim();
+    var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, profile.UserId.ToString(CultureInfo.InvariantCulture)),
+        new(ClaimTypes.Name, profile.Username),
+        new(ClaimTypes.Role, role),
+        new("FullName", fullName),
+        new(AuthConstants.SessionExpiresUtcTicksClaim, expiresUtc.UtcDateTime.Ticks.ToString(CultureInfo.InvariantCulture))
+    };
+
+    await context.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)),
+        new AuthenticationProperties
+        {
+            IsPersistent = true,
+            IssuedUtc = DateTimeOffset.UtcNow,
+            ExpiresUtc = expiresUtc,
+            AllowRefresh = false
+        });
+
+    return Results.Redirect(AppendQuery(returnUrl, "success", "Хувийн мэдээлэл шинэчлэгдлээ."));
+}).RequireAuthorization();
 
 app.MapPost("/accounts/open/submit", async (HttpContext context, IAccountService accountService, CancellationToken cancellationToken) =>
 {
@@ -277,6 +360,42 @@ app.MapPost("/admin/accounts/toggle-status", async (HttpContext context, IAdminS
     return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Хүсэлт боловсруулах үед алдаа гарлаа."));
 }).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
 
+app.MapPost("/admin/accounts/transaction-limit", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/accounts");
+    if (!long.TryParse(form["AccountId"].ToString(), out var accountId))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Дансны мэдээлэл буруу байна."));
+    }
+
+    decimal dailyLimitMnt;
+    var limitValue = form["LimitAmount"].ToString();
+    if (string.IsNullOrWhiteSpace(limitValue) ||
+        !decimal.TryParse(limitValue, NumberStyles.Number, CultureInfo.InvariantCulture, out dailyLimitMnt))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Өдрийн лимитийн дүн буруу байна."));
+    }
+
+    var result = await adminService.UpdateAccountTransactionLimitAsync(
+        adminUserId,
+        new UpdateAccountTransactionLimitDto
+        {
+            AccountId = accountId,
+            DailyLimitMnt = dailyLimitMnt,
+            Reason = form["Reason"].ToString()
+        },
+        cancellationToken);
+
+    var queryName = result.Success ? "success" : "error";
+    return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Лимит тохируулах үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
 app.MapPost("/admin/suspicious-transactions/review", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
 {
     if (!TryReadCurrentUserId(context, out var adminUserId))
@@ -306,12 +425,43 @@ app.MapPost("/admin/suspicious-transactions/review", async (HttpContext context,
             ReviewNote = form["ReviewNote"].ToString(),
             SendUserNotification = form.ContainsKey("SendUserNotification"),
             UserNotificationMessage = form["UserNotificationMessage"].ToString(),
+            NotifySender = form.ContainsKey("NotifySender"),
+            NotifyReceiver = form.ContainsKey("NotifyReceiver"),
+            SenderNotificationMessage = form["SenderNotificationMessage"].ToString(),
+            ReceiverNotificationMessage = form["ReceiverNotificationMessage"].ToString(),
+            DeactivateSenderAccount = form.ContainsKey("DeactivateSenderAccount"),
+            DeactivateReceiverAccount = form.ContainsKey("DeactivateReceiverAccount"),
+            DeactivateSenderUser = form.ContainsKey("DeactivateSenderUser"),
+            DeactivateReceiverUser = form.ContainsKey("DeactivateReceiverUser"),
             ExpectedUpdatedAtTicks = expectedUpdatedAtTicks
         },
         cancellationToken);
 
     var queryName = result.Success ? "success" : "error";
     return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Review status шинэчлэх үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/suspicious-transactions/escalate", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Ð¢Ð°%20Ð½ÑÐ²Ñ‚Ñ€ÑÑÐ³Ò¯Ð¹%20Ð±Ð°Ð¹Ð½Ð°.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/ai-detection");
+    if (!long.TryParse(form["TransactionId"].ToString(), out var transactionId))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Review workflow үүсгэх гүйлгээ буруу байна."));
+    }
+
+    var result = await adminService.EnsureSuspiciousReviewAsync(adminUserId, transactionId, cancellationToken);
+    if (!result.Success)
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", result.ErrorMessage ?? "Review workflow үүсгэх үед алдаа гарлаа."));
+    }
+
+    return Results.Redirect($"/admin/suspicious-transactions?detail={transactionId}");
 }).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
 
 app.MapPost("/admin/ai-detection/analyze", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
@@ -590,13 +740,13 @@ app.Run();
 
 static string BuildLoginRedirect(string loginPath, string? returnUrl, string errorMessage)
 {
-    var query = $"error={Uri.EscapeDataString(errorMessage)}";
+    var redirectUrl = AppendQuery(loginPath, "error", errorMessage);
     if (!string.IsNullOrWhiteSpace(returnUrl) && IsLocalUrl(returnUrl))
     {
-        query += $"&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        redirectUrl = AppendQuery(redirectUrl, "returnUrl", returnUrl);
     }
 
-    return $"{loginPath}?{query}";
+    return redirectUrl;
 }
 
 static string GetSafeLocalUrl(string? returnUrl, string fallbackUrl)
@@ -645,6 +795,24 @@ static bool TryReadCurrentUserId(HttpContext context, out long userId)
 {
     var userIdValue = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
     return long.TryParse(userIdValue, out userId);
+}
+
+static DateTimeOffset GetCurrentSessionExpiry(HttpContext context, string role)
+{
+    var claimValue = context.User.FindFirstValue(AuthConstants.SessionExpiresUtcTicksClaim);
+    if (long.TryParse(claimValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var ticks))
+    {
+        var currentExpiry = new DateTimeOffset(new DateTime(ticks, DateTimeKind.Utc));
+        if (currentExpiry > DateTimeOffset.UtcNow)
+        {
+            return currentExpiry;
+        }
+    }
+
+    var timeout = string.Equals(role, "ADMIN", StringComparison.OrdinalIgnoreCase)
+        ? AuthConstants.AdminSessionTimeout
+        : AuthConstants.UserSessionTimeout;
+    return DateTimeOffset.UtcNow.Add(timeout);
 }
 
 static bool TryReadDecimal(string value, out decimal result)

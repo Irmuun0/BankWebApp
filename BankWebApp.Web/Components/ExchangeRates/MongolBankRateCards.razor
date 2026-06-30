@@ -2,9 +2,9 @@
 @rendermode InteractiveServer
 @inject IExchangeRateService ExchangeRateService
 
-<section class="mt-4 w-100" style="max-width: 960px;">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <h2 class="h6 mb-0">Монголбанкны ханш</h2>
+<section class="home-rate-cards mt-4 w-100" style="max-width: 960px;">
+    <div class="rate-cards-head">
+        <h2>Монголбанкны ханш</h2>
         @if (rateDate is not null)
         {
             <span class="small text-muted">
@@ -30,32 +30,46 @@
     }
     else
     {
-        <div class="row g-2">
+        <div class="home-rate-grid">
             @foreach (var rate in rates)
             {
-                <div class="col-6 col-md-3 col-lg-2">
+                <div>
                     @if (rate.CurrencyCode == "USD" && usdBuyQuote is not null && UsdSellRate is not null)
                     {
-                        <button class="rate-card-button border rounded p-2 bg-white h-100 w-100 text-start"
+                        <button class="rate-card-button home-rate-card home-rate-card-usd"
                                 type="button"
                                 @onclick="ToggleUsdDetails"
                                 aria-expanded="@showUsdDetails">
-                            <div class="d-flex justify-content-between align-items-start gap-2">
-                                <div class="fw-semibold">USD</div>
-                                <span class="small text-muted">Дэлгэрэнгүй</span>
+                            <div class="rate-card-top">
+                                <div>USD</div>
+
+                                <span class="rate-details-icon"
+                                    title="Дэлгэрэнгүй мэдээлэл"
+                                    aria-hidden="true">
+                                    <svg viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="9"></circle>
+                                        <path d="M12 11v5"></path>
+                                        <path d="M12 8h.01"></path>
+                                    </svg>
+                                </span>
                             </div>
-                            <div class="small text-muted mt-1">Авах</div>
-                            <div>@usdBuyQuote.Rate.ToString("N0") MNT</div>
-                            <div class="small text-muted mt-1">Зарах</div>
-                            <div>@UsdSellRate.Value.ToString("N0") MNT</div>
+                            <div class="rate-label">Авах</div>
+                            <div class="rate-number">@usdBuyQuote.Rate.ToString("N0") MNT</div>
+                            <div class="rate-label">Зарах</div>
+                            <div class="rate-number">@UsdSellRate.Value.ToString("N0") MNT</div>
                         </button>
                     }
                     else
                     {
-                        <div class="border rounded p-2 bg-white h-100">
-                            <div class="fw-semibold">@rate.CurrencyCode</div>
-                            <div class="small text-muted">@GetRateUnitLabel(rate.CurrencyCode)</div>
-                            <div>@rate.MntRate.ToString("N2") MNT</div>
+                        <div class="home-rate-card">
+                            <div class="rate-card-top"><div>@rate.CurrencyCode</div></div>
+                            <div class="rate-label">@GetRateUnitLabel(rate.CurrencyCode)</div>
+                            <div class="rate-number">@rate.MntRate.ToString("N2") MNT</div>
                         </div>
                     }
                 </div>

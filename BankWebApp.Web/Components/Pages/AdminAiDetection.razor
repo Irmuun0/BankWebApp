@@ -358,6 +358,22 @@
         font-weight: 600;
     }
 
+    .codex-chip-row form {
+        margin: 0;
+    }
+
+    .codex-chip-button {
+        color: #0e3c99;
+        background: #eef4ff;
+        cursor: pointer;
+    }
+
+    .codex-chip-button:hover,
+    .codex-chip-button:focus-visible {
+        border-color: rgba(14, 60, 153, .35);
+        background: #e1ecff;
+    }
+
     .codex-details {
         margin-top: .8rem;
         border-top: 1px solid #edf0f4;
@@ -581,11 +597,6 @@
 
 <PageTitle>Админ - AI Detection</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>AI Detection</h1>
-    <a class="btn btn-outline-secondary" href="/admin/dashboard">Буцах</a>
-</div>
-
 @if (!string.IsNullOrWhiteSpace(Success))
 {
     <div class="alert alert-success" role="alert">@Success</div>
@@ -663,7 +674,7 @@
             </div>
 
             <div class="ai-table-wrap">
-                <table class="table table-striped align-middle ai-transactions-table">
+                <table class="table table-striped align-middle ai-transactions-table" data-client-sort="true" data-date-group="true">
                     <colgroup>
                         <col style="width: 8rem;" />
                         <col style="width: 8.5rem;" />
@@ -820,6 +831,11 @@
                     <div class="codex-chip-row">
                         <span class="codex-chip">Rule score @(pageModel.ChatTransaction.RuleRiskScore?.ToString("N2") ?? "-")</span>
                         <span class="codex-chip">AI score @(pageModel.ChatTransaction.LatestAiRiskScore?.ToString("N2") ?? "-")</span>
+                        <form method="post" action="/admin/suspicious-transactions/escalate">
+                            <input type="hidden" name="TransactionId" value="@pageModel.ChatTransaction.Id" />
+                            <input type="hidden" name="ReturnUrl" value="@BuildChatReturnUrl(pageModel.ChatTransaction.Id)" />
+                            <button class="codex-chip codex-chip-button" type="submit">Арга хэмжээ авах</button>
+                        </form>
                     </div>
 
                     <details class="codex-details">

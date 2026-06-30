@@ -1,0 +1,157 @@
+@using BlazorBootstrap
+@implements IAsyncDisposable
+
+<section class="chart-card income-expense-chart-card">
+    <div class="chart-card-header income-expense-header">
+        <div>
+            <h3>@Title</h3>
+            @if (!string.IsNullOrWhiteSpace(Subtitle))
+            {
+                <p>@Subtitle</p>
+            }
+        </div>
+        <div class="income-expense-meta">
+            @if (!string.IsNullOrWhiteSpace(Currency))
+            {
+                <span class="chart-unit">@Currency</span>
+            }
+        </div>
+    </div>
+
+    @if (Income <= 0 && Expense <= 0)
+    {
+        <div class="chart-empty">Харуулах өгөгдөл алга.</div>
+    }
+    else
+    {
+        <div class="income-expense-layout">
+            <div class="income-expense-chart-wrap">
+                <DoughnutChart @ref="doughnutChart" Width="160" Height="160" />
+                <div class="income-expense-center" aria-hidden="true">
+                    <span>Зөрүү</span>
+                    <strong class="@NetClass">@FormatSignedMoney(NetAmount)</strong>
+                    <small>@Currency</small>
+                </div>
+            </div>
+
+            <div class="income-expense-legend">
+                <div class="income-expense-row income">
+                    <span class="income-expense-swatch"></span>
+                    <span class="income-expense-label">Орлого</span>
+                    <strong title="@FormatMoney(Income)">@FormatCompactMoney(Income)</strong>
+                </div>
+                <div class="income-expense-row expense">
+                    <span class="income-expense-swatch"></span>
+                    <span class="income-expense-label">Зарлага</span>
+                    <strong title="@FormatMoney(Expense)">@FormatCompactMoney(Expense)</strong>
+                </div>
+            </div>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public decimal Income { get; set; }
+    [Parameter] public decimal Expense { get; set; }
+    [Parameter] public string Currency { get; set; } = string.Empty;
+
+    private DoughnutChart doughnutChart = default!;
+    private ChartData chartData = new();
+    private DoughnutChartOptions chartOptions = new();
+    private bool chartInitialized;
+    private bool pendingChartRefresh = true;
+
+    private decimal NetAmount => Income - Expense;
+
+    private string NetClass => NetAmount >= 0 ? "net-positive" : "net-negative";
+
+    protected override void OnParametersSet()
+    {
+        chartData = BuildChartData();
+        chartOptions = BuildChartOptions();
+        pendingChartRefresh = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Income <= 0 && Expense <= 0 || !pendingChartRefresh)
+        {
+            return;
+        }
+
+        if (!chartInitialized)
+        {
+            await doughnutChart.InitializeAsync(chartData, chartOptions);
+            chartInitialized = true;
+        }
+        else
+        {
+            await doughnutChart.UpdateAsync(chartData, chartOptions);
+        }
+
+        pendingChartRefresh = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await Task.CompletedTask;
+    }
+
+    private ChartData BuildChartData()
+    {
+        return new ChartData
+        {
+            Labels = ["Орлого", "Зарлага"],
+            Datasets =
+            [
+                new DoughnutChartDataset
+                {
+                    Label = "Сүүлийн 1 сарын мөнгөн урсгал",
+                    Data = [(double)Income, (double)Expense],
+                    BackgroundColor = ["#16a34a", "#dc2626"],
+                    BorderColor = ["#ffffff", "#ffffff"],
+                    BorderWidth = [4]
+                }
+            ]
+        };
+    }
+
+    private static DoughnutChartOptions BuildChartOptions()
+    {
+        var options = new DoughnutChartOptions();
+        options.Responsive = true;
+        options.MaintainAspectRatio = false;
+        options.Plugins!.Legend.Display = false;
+        options.Plugins.Title!.Display = false;
+        return options;
+    }
+
+    private static string FormatMoney(decimal value)
+    {
+        return value.ToString(value % 1 == 0 ? "N0" : "N2");
+    }
+
+    private static string FormatCompactMoney(decimal value)
+    {
+        var abs = Math.Abs(value);
+        if (abs >= 1_000_000_000)
+        {
+            return $"{value / 1_000_000_000:N1} тэрбум";
+        }
+
+        if (abs >= 1_000_000)
+        {
+            return $"{value / 1_000_000:N1} сая";
+        }
+
+        return FormatMoney(value);
+    }
+
+    private static string FormatSignedMoney(decimal value)
+    {
+        var prefix = value > 0 ? "+" : string.Empty;
+        return $"{prefix}{FormatCompactMoney(value)}";
+    }
+}

@@ -3,8 +3,16 @@
 from fastapi import FastAPI
 
 from app.config import settings
-from app.gemini_client import analyze_transaction, answer_follow_up, explain_transaction
+from app.gemini_client import (
+    analyze_transaction,
+    answer_bank_info_question,
+    answer_follow_up,
+    answer_user_finance_question,
+    explain_transaction,
+)
 from app.models import (
+    BankInfoChatRequest,
+    BankInfoChatResponse,
     GeminiAnalyzeRequest,
     GeminiAnalysisResponse,
     GeminiChatRequest,
@@ -14,6 +22,8 @@ from app.models import (
     HealthResponse,
     SuspiciousDetectionRequest,
     SuspiciousDetectionResponse,
+    UserFinanceChatRequest,
+    UserFinanceChatResponse,
 )
 from app.rules import detect_suspicious
 
@@ -59,5 +69,30 @@ def ask_transaction_question_endpoint(request: GeminiChatRequest) -> GeminiChatR
             request.existingAnalysis,
             request.question,
             request.modelName,
+        )
+    )
+
+
+@app.post("/chat/bank-info", response_model=BankInfoChatResponse)
+def ask_public_bank_info_endpoint(request: BankInfoChatRequest) -> BankInfoChatResponse:
+    """Public Chubi AI chat: зөвхөн Phoebe Bank системийн талаарх мэдээлэл өгнө."""
+
+    return BankInfoChatResponse(
+        answer=answer_bank_info_question(
+            request.question,
+            request.conversation,
+        )
+    )
+
+
+@app.post("/chat/user-finance", response_model=UserFinanceChatResponse)
+def ask_user_finance_endpoint(request: UserFinanceChatRequest) -> UserFinanceChatResponse:
+    """Logged-in Chubi AI chat: хэрэглэгчийн sanitized санхүүгийн context дээр хариулна."""
+
+    return UserFinanceChatResponse(
+        answer=answer_user_finance_question(
+            request.question,
+            request.context,
+            request.conversation,
         )
     )

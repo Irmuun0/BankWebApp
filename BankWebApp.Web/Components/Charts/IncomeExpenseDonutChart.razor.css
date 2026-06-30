@@ -1,0 +1,205 @@
+.income-expense-chart-card {
+    min-height: 100%;
+    overflow: hidden;
+    padding: 1.25rem 1.25rem 1rem;
+}
+
+.income-expense-header {
+    gap: .85rem;
+    align-items: start;
+    margin-bottom: .85rem;
+}
+
+.income-expense-header h3 {
+    font-family: var(--font-cyrillic, "Noto Sans", system-ui, sans-serif) !important;
+    font-size: 1.08rem;
+    font-weight: 880;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+}
+
+.income-expense-header p {
+    max-width: 18rem;
+    font-family: var(--font-cyrillic, "Noto Sans", system-ui, sans-serif) !important;
+    font-size: .84rem;
+    font-weight: 520;
+    line-height: 1.42;
+}
+
+.income-expense-meta {
+    display: flex;
+    align-items: start;
+    justify-content: flex-end;
+}
+
+.chart-unit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3rem;
+    padding: .28rem .62rem;
+    border: 1px solid rgba(14, 60, 153, .12);
+    border-radius: 999px;
+    color: var(--phoebe-blue, #0e3c99);
+    background: rgba(14, 60, 153, .07);
+    font-family: var(--font-latin, "Inter", system-ui, sans-serif) !important;
+    font-size: .72rem;
+    font-weight: 900;
+    letter-spacing: .02em;
+}
+
+.income-expense-layout {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, 8.8rem) minmax(0, 1fr);
+    gap: .95rem;
+    align-items: center;
+    padding-top: .15rem;
+}
+
+.income-expense-chart-wrap {
+    position: relative;
+    width: 8.8rem;
+    height: 8.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle, #fff 0 47%, transparent 48%),
+        linear-gradient(135deg, rgba(14, 60, 153, .06), rgba(214, 169, 79, .09));
+    filter: drop-shadow(0 12px 22px rgba(0, 12, 48, .09));
+}
+
+.income-expense-chart-wrap canvas {
+    display: block;
+    width: 8.8rem !important;
+    height: 8.8rem !important;
+    max-width: 8.8rem !important;
+    max-height: 8.8rem !important;
+}
+
+.income-expense-center {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    width: 4.65rem;
+    min-height: 4.65rem;
+    padding: .32rem;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .96);
+    text-align: center;
+    transform: translate(-50%, -50%);
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .06);
+}
+
+.income-expense-center span {
+    color: #64748b;
+    font-size: .62rem;
+    font-weight: 850;
+}
+
+.income-expense-center strong {
+    max-width: 4.2rem;
+    margin-top: .1rem;
+    font-size: .74rem;
+    font-weight: 920;
+    line-height: 1.05;
+    overflow-wrap: anywhere;
+}
+
+.income-expense-center small {
+    color: #64748b;
+    font-size: .58rem;
+    font-weight: 820;
+}
+
+.net-positive {
+    color: #16a34a;
+}
+
+.net-negative {
+    color: #dc2626;
+}
+
+.income-expense-legend {
+    display: grid;
+    gap: .55rem;
+    min-width: 0;
+}
+
+.income-expense-row {
+    display: grid;
+    grid-template-columns: .8rem minmax(4.5rem, 1fr);
+    gap: .32rem .55rem;
+    align-items: center;
+    min-width: 0;
+    border: 1px solid #e3e9f3;
+    border-radius: .8rem;
+    padding: .58rem .68rem;
+    background: linear-gradient(180deg, #fff, #fbfdff);
+}
+
+.income-expense-swatch {
+    width: .72rem;
+    height: .72rem;
+    border-radius: 50%;
+}
+
+.income .income-expense-swatch {
+    background: #16a34a;
+}
+
+.expense .income-expense-swatch {
+    background: #dc2626;
+}
+
+.income-expense-label {
+    color: #475569;
+    font-size: .8rem;
+    font-weight: 800;
+    min-width: 0;
+}
+
+.income-expense-row strong {
+    grid-column: 2;
+    color: var(--phoebe-navy, #000c30);
+    font-size: .9rem;
+    font-weight: 900;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+    .income-expense-layout {
+        grid-template-columns: 1fr;
+        justify-items: center;
+    }
+
+    .income-expense-legend {
+        width: 100%;
+    }
+}
+
+@media (max-width: 720px) {
+    .income-expense-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .income-expense-chart-wrap {
+        width: 8.5rem;
+        height: 8.5rem;
+    }
+
+    .income-expense-chart-wrap canvas {
+        width: 8.5rem !important;
+        height: 8.5rem !important;
+        max-width: 8.5rem !important;
+        max-height: 8.5rem !important;
+    }
+}

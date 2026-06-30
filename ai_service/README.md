@@ -1,4 +1,4 @@
-﻿# Bank AI Service
+# Bank AI Service
 
 Rule-based suspicious transaction detection and Gemini analysis service for the Bank Web Software MVP.
 
@@ -33,6 +33,8 @@ uvicorn app.main:app --reload --port 8000
 - `POST http://localhost:8000/analyze-transaction`
 - `POST http://localhost:8000/chat/ask`
 - `POST http://localhost:8000/chat/explain`
+- `POST http://localhost:8000/chat/bank-info`
+- `POST http://localhost:8000/chat/user-finance`
 - Swagger: `http://localhost:8000/docs`
 
 The service receives only transaction-related values. It must not receive password hashes, national IDs, phone numbers, email addresses, or full user profiles.

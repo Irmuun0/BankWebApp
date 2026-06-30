@@ -1,3 +1,6 @@
+@using BlazorBootstrap
+@implements IAsyncDisposable
+
 <section class="chart-card">
     <div class="chart-card-header">
         <div>
@@ -7,6 +10,10 @@
                 <p>@Subtitle</p>
             }
         </div>
+        @if (!string.IsNullOrWhiteSpace(Unit))
+        {
+            <span class="chart-unit">@Unit</span>
+        }
     </div>
 
     @if (VisibleItems.Count == 0)
@@ -16,7 +23,8 @@
     else
     {
         <div class="donut-chart-layout">
-            <div class="donut-chart" style="@BuildDonutStyle()" role="img" aria-label="@Title">
+            <div class="bb-donut-wrap">
+                <BlazorBootstrap.DoughnutChart @ref="doughnutChart" Width="160" Height="160" />
                 <div class="donut-chart-center">
                     <strong>@FormatValue(Total)</strong>
                     @if (!string.IsNullOrWhiteSpace(Unit))
@@ -41,41 +49,76 @@
 </section>
 
 @code {
-    [Parameter]
-    public string Title { get; set; } = string.Empty;
+    [Parameter] public string Title { get; set; } = string.Empty;
+    [Parameter] public string? Subtitle { get; set; }
+    [Parameter] public string? Unit { get; set; }
+    [Parameter] public IReadOnlyList<ChartDataPoint> Items { get; set; } = [];
 
-    [Parameter]
-    public string? Subtitle { get; set; }
+    private BlazorBootstrap.DoughnutChart doughnutChart = default!;
+    private ChartData chartData = new();
+    private DoughnutChartOptions chartOptions = new();
+    private bool chartInitialized;
+    private bool pendingChartRefresh = true;
 
-    [Parameter]
-    public string? Unit { get; set; }
-
-    [Parameter]
-    public IReadOnlyList<ChartDataPoint> Items { get; set; } = [];
-
-    private IReadOnlyList<ChartDataPoint> VisibleItems => Items
-        .Where(item => item.Value > 0)
-        .ToList();
-
+    private IReadOnlyList<ChartDataPoint> VisibleItems => Items.Where(item => item.Value > 0).ToList();
     private decimal Total => VisibleItems.Sum(item => item.Value);
 
-    private string BuildDonutStyle()
+    protected override void OnParametersSet()
     {
-        if (Total <= 0)
+        chartData = BuildChartData();
+        chartOptions = BuildChartOptions();
+        pendingChartRefresh = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (VisibleItems.Count == 0 || !pendingChartRefresh)
         {
-            return "background: #edf2f7;";
+            return;
         }
 
-        var start = 0m;
-        var segments = new List<string>();
-        foreach (var item in VisibleItems)
+        if (!chartInitialized)
         {
-            var end = start + (item.Value / Total * 100m);
-            segments.Add($"{item.Color} {(double)start:0.##}% {(double)end:0.##}%");
-            start = end;
+            await doughnutChart.InitializeAsync(chartData, chartOptions);
+            chartInitialized = true;
+        }
+        else
+        {
+            await doughnutChart.UpdateAsync(chartData, chartOptions);
         }
 
-        return $"background: conic-gradient({string.Join(", ", segments)});";
+        pendingChartRefresh = false;
+    }
+
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+    private ChartData BuildChartData()
+    {
+        return new ChartData
+        {
+            Labels = VisibleItems.Select(item => item.Label).ToList(),
+            Datasets =
+            [
+                new DoughnutChartDataset
+                {
+                    Label = Title,
+                    Data = VisibleItems.Select(item => (double?)item.Value).ToList(),
+                    BackgroundColor = VisibleItems.Select(item => item.Color).ToList(),
+                    BorderColor = VisibleItems.Select(_ => "#ffffff").ToList(),
+                    BorderWidth = [4]
+                }
+            ]
+        };
+    }
+
+    private static DoughnutChartOptions BuildChartOptions()
+    {
+        var options = new DoughnutChartOptions();
+        options.Responsive = true;
+        options.MaintainAspectRatio = false;
+        options.Plugins!.Legend.Display = false;
+        options.Plugins.Title!.Display = false;
+        return options;
     }
 
     private static string FormatValue(decimal value)

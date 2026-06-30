@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace BankWebApp.Web.Data.Entities;
@@ -17,6 +17,8 @@ public partial class Account
 
     public decimal Balance { get; set; }
 
+    public decimal DailyTransactionLimitMnt { get; set; }
+
     public bool IsActive { get; set; }
 
     public bool IsPrimary { get; set; }
@@ -28,6 +30,8 @@ public partial class Account
     public virtual ICollection<Transaction> TransactionFromAccounts { get; set; } = new List<Transaction>();
 
     public virtual ICollection<Transaction> TransactionToAccounts { get; set; } = new List<Transaction>();
+
+    public virtual ICollection<AccountTransactionLimitHistory> AccountTransactionLimitHistories { get; set; } = new List<AccountTransactionLimitHistory>();
 
     public virtual User User { get; set; } = null!;
 }

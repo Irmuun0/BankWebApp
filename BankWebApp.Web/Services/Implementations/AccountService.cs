@@ -9,6 +9,7 @@ namespace BankWebApp.Web.Services.Implementations;
 
 public class AccountService : IAccountService
 {
+    private const decimal DefaultDailyTransactionLimitMnt = 50000000.00m;
     private static readonly string[] SupportedCurrencies = ["MNT", "USD"];
 
     private readonly BankDbContext _dbContext;
@@ -33,6 +34,7 @@ public class AccountService : IAccountService
                 AccountType = account.AccountType,
                 Currency = account.Currency,
                 Balance = account.Balance,
+                DailyTransactionLimitMnt = account.DailyTransactionLimitMnt,
                 IsActive = account.IsActive,
                 IsPrimary = account.IsPrimary,
                 CreatedAt = account.CreatedAt,
@@ -53,6 +55,7 @@ public class AccountService : IAccountService
                 AccountType = account.AccountType,
                 Currency = account.Currency,
                 Balance = account.Balance,
+                DailyTransactionLimitMnt = account.DailyTransactionLimitMnt,
                 IsActive = account.IsActive,
                 IsPrimary = account.IsPrimary,
                 CreatedAt = account.CreatedAt,
@@ -125,6 +128,7 @@ public class AccountService : IAccountService
                 AccountType = "CHECKING",
                 Currency = currency,
                 Balance = 0,
+                DailyTransactionLimitMnt = DefaultDailyTransactionLimitMnt,
                 IsActive = true,
                 IsPrimary = !hasAnyAccount,
                 CreatedAt = now,
@@ -236,6 +240,7 @@ public class AccountService : IAccountService
             AccountType = account.AccountType,
             Currency = account.Currency,
             Balance = account.Balance,
+            DailyTransactionLimitMnt = account.DailyTransactionLimitMnt,
             IsActive = account.IsActive,
             IsPrimary = account.IsPrimary,
             CreatedAt = account.CreatedAt

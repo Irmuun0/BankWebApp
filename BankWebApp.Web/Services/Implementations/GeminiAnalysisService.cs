@@ -82,6 +82,67 @@ public class GeminiAnalysisService : IGeminiAnalysisService
             : (false, null, result.ErrorMessage);
     }
 
+    public async Task<(bool Success, string? Answer, string? ErrorMessage)> AskPublicBankInfoQuestionAsync(
+        string question,
+        IReadOnlyList<PublicBankChatMessageDto> conversation,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(question))
+        {
+            return (false, null, "Асуулт хоосон байна.");
+        }
+
+        var safeConversation = conversation
+            .Where(message => !string.IsNullOrWhiteSpace(message.Content))
+            .TakeLast(10)
+            .Select(message => new PublicBankChatMessageDto
+            {
+                Role = string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "assistant" : "user",
+                Content = NormalizeText(message.Content)
+            })
+            .ToList();
+
+        var result = await PostAsync<BankInfoChatRequest, BankInfoChatResponse>(
+            "chat/bank-info",
+            new BankInfoChatRequest(question.Trim(), safeConversation),
+            cancellationToken);
+
+        return result.Success
+            ? (true, NormalizeText(result.Value!.Answer), null)
+            : (false, null, result.ErrorMessage);
+    }
+
+    public async Task<(bool Success, string? Answer, string? ErrorMessage)> AskUserFinanceQuestionAsync(
+        string question,
+        UserFinanceChatContextDto context,
+        IReadOnlyList<PublicBankChatMessageDto> conversation,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(question))
+        {
+            return (false, null, "Асуулт хоосон байна.");
+        }
+
+        var safeConversation = conversation
+            .Where(message => !string.IsNullOrWhiteSpace(message.Content))
+            .TakeLast(10)
+            .Select(message => new PublicBankChatMessageDto
+            {
+                Role = string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ? "assistant" : "user",
+                Content = NormalizeText(message.Content)
+            })
+            .ToList();
+
+        var result = await PostAsync<UserFinanceChatRequest, BankInfoChatResponse>(
+            "chat/user-finance",
+            new UserFinanceChatRequest(question.Trim(), context, safeConversation),
+            cancellationToken);
+
+        return result.Success
+            ? (true, NormalizeText(result.Value!.Answer), null)
+            : (false, null, result.ErrorMessage);
+    }
+
     private async Task<(bool Success, TResponse? Value, string? ErrorMessage)> PostAsync<TRequest, TResponse>(
         string endpoint,
         TRequest request,
@@ -175,4 +236,10 @@ public class GeminiAnalysisService : IGeminiAnalysisService
     private sealed record ChatRequest(GeminiSuspiciousAnalysisContextDto Context, string ExistingAnalysis, string Question, string? ModelName);
 
     private sealed record ChatResponse(string Answer);
+
+    private sealed record BankInfoChatRequest(string Question, IReadOnlyList<PublicBankChatMessageDto> Conversation);
+
+    private sealed record BankInfoChatResponse(string Answer);
+
+    private sealed record UserFinanceChatRequest(string Question, UserFinanceChatContextDto Context, IReadOnlyList<PublicBankChatMessageDto> Conversation);
 }

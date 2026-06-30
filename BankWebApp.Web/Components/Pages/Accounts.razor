@@ -6,14 +6,11 @@
 <PageTitle>Миний дансууд</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <a class="btn btn-outline-secondary" href="/dashboard">Буцах</a>
     <div>
         <a class="btn btn-outline-primary me-2" href="/accounts/settings">Тохиргоо</a>
         <a class="btn btn-primary" href="/accounts/open">Данс нээх</a>
     </div>
 </div>
-
-<h1>Миний дансууд</h1>
 
 @if (isLoading)
 {
@@ -54,7 +51,10 @@ else
                     </td>
                     <td>@DisplayAccountType(account.AccountType)</td>
                     <td>@account.Currency</td>
-                    <td>@account.Balance.ToString("N2")</td>
+                    <td class="money-stack">
+                        <span class="money-amount">@account.Balance.ToString("N2")</span>
+                        <span class="money-currency">@account.Currency</span>
+                    </td>
                     <td>@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</td>
                     <td>@account.CreatedAt.ToString("yyyy-MM-dd")</td>
                     <td><a class="btn btn-sm btn-outline-primary" href="/accounts/@account.Id">Дэлгэрэнгүй</a></td>
