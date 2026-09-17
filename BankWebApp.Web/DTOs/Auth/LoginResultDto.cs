@@ -8,4 +8,5 @@ public class LoginResultDto
     public string? Username { get; set; }
     public string? FullName { get; set; }
     public string? Role { get; set; }
+    public bool PasswordResetRequired { get; set; }
 }

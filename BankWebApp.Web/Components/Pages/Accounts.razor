@@ -55,7 +55,7 @@ else
                         <span class="money-amount">@account.Balance.ToString("N2")</span>
                         <span class="money-currency">@account.Currency</span>
                     </td>
-                    <td>@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</td>
+                    <td>@DisplayStatus(account)</td>
                     <td>@account.CreatedAt.ToString("yyyy-MM-dd")</td>
                     <td><a class="btn btn-sm btn-outline-primary" href="/accounts/@account.Id">Дэлгэрэнгүй</a></td>
                 </tr>
@@ -87,4 +87,7 @@ else
     {
         return accountType == "CHECKING" ? "Харилцах" : accountType;
     }
+
+    private static string DisplayStatus(BankWebApp.Web.DTOs.Accounts.AccountDto account)
+        => account.IsAdminLocked ? "Системээр хаагдсан" : account.IsActive ? "Идэвхтэй" : "Идэвхгүй";
 }

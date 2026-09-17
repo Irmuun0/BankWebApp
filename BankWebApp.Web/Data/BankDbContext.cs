@@ -50,6 +50,8 @@ public partial class BankDbContext : DbContext
 
     public virtual DbSet<TransactionDetectionLog> TransactionDetectionLogs { get; set; }
 
+    public virtual DbSet<UserRegistrationRequest> UserRegistrationRequests { get; set; }
+
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<UserTransactionView> UserTransactionViews { get; set; }
@@ -65,6 +67,8 @@ public partial class BankDbContext : DbContext
             entity.HasIndex(e => e.Currency, "idx_accounts_currency");
 
             entity.HasIndex(e => e.IsActive, "idx_accounts_is_active");
+
+            entity.HasIndex(e => e.IsAdminLocked, "idx_accounts_is_admin_locked");
 
             entity.HasIndex(e => e.IsPrimary, "idx_accounts_is_primary");
 
@@ -100,6 +104,14 @@ public partial class BankDbContext : DbContext
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true, "df_accounts_is_active")
                 .HasColumnName("is_active");
+            entity.Property(e => e.IsAdminLocked)
+                .HasDefaultValue(false, "df_accounts_is_admin_locked")
+                .HasColumnName("is_admin_locked");
+            entity.Property(e => e.AdminLockedAt)
+                .HasColumnType("datetime2(7)")
+                .HasColumnName("admin_locked_at");
+            entity.Property(e => e.AdminLockedByUserId)
+                .HasColumnName("admin_locked_by_user_id");
             entity.Property(e => e.IsPrimary)
                 .HasDefaultValue(false, "df_accounts_is_primary")
                 .HasColumnName("is_primary");
@@ -924,6 +936,72 @@ public partial class BankDbContext : DbContext
                 .HasConstraintName("fk_transaction_detection_transaction");
         });
 
+        modelBuilder.Entity<UserRegistrationRequest>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("pk_user_registration_requests");
+
+            entity.ToTable("user_registration_requests");
+
+            entity.HasIndex(e => new { e.Status, e.CreatedAt }, "idx_user_registration_requests_status_created_at");
+
+            entity.HasIndex(e => e.CreatedUserId, "idx_user_registration_requests_created_user_id");
+
+            entity.HasIndex(e => e.Email, "idx_user_registration_requests_email");
+
+            entity.HasIndex(e => e.NationalId, "idx_user_registration_requests_national_id");
+
+            entity.HasIndex(e => e.RequestedUsername, "idx_user_registration_requests_requested_username");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AdminNote)
+                .HasMaxLength(500)
+                .HasColumnName("admin_note");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())", "df_user_registration_requests_created_at")
+                .HasColumnName("created_at");
+            entity.Property(e => e.CreatedUserId).HasColumnName("created_user_id");
+            entity.Property(e => e.DecisionMessage)
+                .HasMaxLength(1000)
+                .HasColumnName("decision_message");
+            entity.Property(e => e.Email)
+                .HasMaxLength(100)
+                .HasColumnName("email");
+            entity.Property(e => e.EmergencyPhoneNumber)
+                .HasMaxLength(20)
+                .HasColumnName("emergency_phone_number");
+            entity.Property(e => e.FirstName)
+                .HasMaxLength(50)
+                .HasColumnName("first_name");
+            entity.Property(e => e.LastName)
+                .HasMaxLength(50)
+                .HasColumnName("last_name");
+            entity.Property(e => e.NationalId)
+                .HasMaxLength(20)
+                .HasColumnName("national_id");
+            entity.Property(e => e.PhoneNumber)
+                .HasMaxLength(20)
+                .HasColumnName("phone_number");
+            entity.Property(e => e.PreferredContactMethod)
+                .HasMaxLength(20)
+                .HasDefaultValue("EMAIL", "df_user_registration_requests_contact")
+                .HasColumnName("preferred_contact_method");
+            entity.Property(e => e.RequestNote)
+                .HasMaxLength(500)
+                .HasColumnName("request_note");
+            entity.Property(e => e.RequestedUsername)
+                .HasMaxLength(50)
+                .HasColumnName("requested_username");
+            entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+            entity.Property(e => e.ReviewedByAdminId).HasColumnName("reviewed_by_admin_id");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("PENDING", "df_user_registration_requests_status")
+                .HasColumnName("status");
+            entity.Property(e => e.UpdatedAt)
+                .HasDefaultValueSql("(sysutcdatetime())", "df_user_registration_requests_updated_at")
+                .HasColumnName("updated_at");
+        });
+
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(e => e.Id).HasName("pk_users");
@@ -983,6 +1061,9 @@ public partial class BankDbContext : DbContext
                 .HasMaxLength(255)
                 .HasColumnName("password_hash");
             entity.Property(e => e.PasswordChangedAt).HasColumnName("password_changed_at");
+            entity.Property(e => e.PasswordResetRequired)
+                .HasDefaultValue(false, "df_users_password_reset_required")
+                .HasColumnName("password_reset_required");
             entity.Property(e => e.PhoneNumber)
                 .HasMaxLength(20)
                 .HasColumnName("phone_number");

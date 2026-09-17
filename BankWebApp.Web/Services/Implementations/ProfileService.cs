@@ -103,6 +103,10 @@ public class ProfileService : IProfileService
                 return Failed(string.Join(" ", policy.Errors));
             }
         }
+        else if (user.PasswordResetRequired)
+        {
+            return Failed("Нууц үгээ шинэчлэх шаардлагатай байна.");
+        }
 
         var updatedAt = MongoliaClock.Now;
         var oldValue = new
@@ -111,7 +115,8 @@ public class ProfileService : IProfileService
             user.Email,
             user.PhoneNumber,
             user.EmergencyPhoneNumber,
-            PasswordChanged = false
+            PasswordChanged = false,
+            user.PasswordResetRequired
         };
 
         user.Username = username;
@@ -124,6 +129,7 @@ public class ProfileService : IProfileService
         {
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
             user.PasswordChangedAt = updatedAt;
+            user.PasswordResetRequired = false;
         }
 
         _dbContext.AuditLogs.Add(new AuditLog
@@ -139,7 +145,8 @@ public class ProfileService : IProfileService
                 user.Email,
                 user.PhoneNumber,
                 user.EmergencyPhoneNumber,
-                PasswordChanged = changingPassword
+                PasswordChanged = changingPassword,
+                user.PasswordResetRequired
             }),
             Detail = "User updated own profile settings.",
             IpAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString(),
@@ -168,6 +175,7 @@ public class ProfileService : IProfileService
             PhoneNumber = user.PhoneNumber,
             EmergencyPhoneNumber = user.EmergencyPhoneNumber,
             Role = user.Role,
+            PasswordResetRequired = user.PasswordResetRequired,
             LastLoginAt = user.LastLoginAt,
             PasswordChangedAt = user.PasswordChangedAt
         };

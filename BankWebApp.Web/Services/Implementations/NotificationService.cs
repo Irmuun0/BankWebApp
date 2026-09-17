@@ -20,9 +20,11 @@ public class NotificationService : INotificationService
         CancellationToken cancellationToken = default)
     {
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await BuildNotificationQuery(dbContext, userId)
+        var notifications = await BuildNotificationQuery(dbContext, userId)
             .Take(Math.Clamp(count, 1, 20))
             .ToListAsync(cancellationToken);
+        NormalizeLegacyNotifications(notifications);
+        return notifications;
     }
 
     public async Task<List<NotificationDto>> GetRecentUnreadNotificationsAsync(
@@ -31,10 +33,12 @@ public class NotificationService : INotificationService
         CancellationToken cancellationToken = default)
     {
         await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        return await BuildNotificationQuery(dbContext, userId)
+        var notifications = await BuildNotificationQuery(dbContext, userId)
             .Where(notification => !notification.IsRead)
             .Take(Math.Clamp(count, 1, 10))
             .ToListAsync(cancellationToken);
+        NormalizeLegacyNotifications(notifications);
+        return notifications;
     }
 
     public async Task MarkAsReadAsync(
@@ -73,5 +77,25 @@ public class NotificationService : INotificationService
                 IsRead = notification.IsRead,
                 CreatedAt = notification.CreatedAt
             });
+    }
+
+    private static void NormalizeLegacyNotifications(IEnumerable<NotificationDto> notifications)
+    {
+        foreach (var notification in notifications)
+        {
+            if (string.Equals(notification.Title, "Guilgeeni anhaaruulga", StringComparison.OrdinalIgnoreCase))
+            {
+                notification.Title = "Гүйлгээний анхааруулга";
+            }
+
+            if (notification.Message.StartsWith(
+                    "Tanii guilgeeg system nemelt shalgaltad burtgelee",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                notification.Message =
+                    "Таны гүйлгээг систем нэмэлт шалгалтад бүртгэлээ. " +
+                    "Дэлгэрэнгүй мэдээлэл шаардлагатай бол банкны ажилтантай холбогдоно уу.";
+            }
+        }
     }
 }

@@ -6,90 +6,159 @@
 
 <PageTitle>Админ - Хэрэглэгчид</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>Хэрэглэгчид</h1>
-</div>
-
 @if (!string.IsNullOrWhiteSpace(Success))
 {
-    <div class="alert alert-success" role="alert">@Success</div>
+    <div class="profile-toast profile-toast-success" role="status">@Success</div>
 }
 
 @if (!string.IsNullOrWhiteSpace(Error))
 {
-    <div class="alert alert-danger" role="alert">@Error</div>
+    <div class="profile-toast profile-toast-error" role="alert">@Error</div>
 }
 
 @if (isLoading)
 {
-    <p><em>Уншиж байна...</em></p>
+    <AppLoading Title="Хэрэглэгчдийн мэдээлэл уншиж байна" Message="Шүүлтүүрийн нөхцөлөөр өгөгдлийн сангаас мөрүүдийг авч байна." />
 }
 else
 {
-    <form class="row g-2 mb-3" method="get" action="/admin/users">
-        <div class="col-12 col-md-5">
-            <input class="form-control" name="search" value="@Search" placeholder="Username, email, нэр, утас хайх" />
-        </div>
-        <div class="col-auto">
-            <button class="btn btn-outline-primary" type="submit">Хайх</button>
-        </div>
-        <div class="col-auto">
-            <a class="btn btn-outline-secondary" href="/admin/users">Цэвэрлэх</a>
-        </div>
-    </form>
-}
+    <section class="admin-users-filter-card">
+        <form method="get" action="/admin/users" class="admin-users-filter-grid">
+            <input type="hidden" name="page" value="1" />
 
-@if (!isLoading && users.Items.Count == 0)
-{
-    <p>Хэрэглэгч олдсонгүй.</p>
-}
-else if (!isLoading)
-{
-    <table class="table table-striped align-middle" data-client-sort="true">
-        <thead>
-            <tr>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Нэр, овог</th>
-                <th>Утас</th>
-                <th>Role</th>
-                <th>Төлөв</th>
-                <th>Бүртгэсэн огноо</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var user in users.Items)
-            {
-                <tr>
-                    <td>@user.Username</td>
-                    <td>@user.Email</td>
-                    <td>@(user.FullName ?? "-")</td>
-                    <td>@(user.PhoneNumber ?? "-")</td>
-                    <td>@user.Role</td>
-                    <td>@DisplayActive(user.IsActive)</td>
-                    <td>@user.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                    <td class="text-end">
-                        <form method="post" action="/admin/users/toggle-status">
-                            <input type="hidden" name="UserId" value="@user.Id" />
-                            <input type="hidden" name="IsActive" value="@(!user.IsActive)" />
-                            <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
-                            <button class="btn p-0 border-0 bg-transparent"
-                                    type="submit"
-                                    title="Төлөв солих"
-                                    disabled="@(CurrentUser.UserId == user.Id && user.IsActive)">
-                                <span class="d-inline-flex align-items-center rounded-pill p-1 @(user.IsActive ? "bg-success" : "bg-secondary")" style="width: 44px;">
-                                    <span class="bg-white rounded-circle d-inline-block @(user.IsActive ? "ms-auto" : "")" style="width: 18px; height: 18px;"></span>
-                                </span>
-                            </button>
-                        </form>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+            <label>
+                <span>Ерөнхий хайлт</span>
+                <input name="search" value="@Search" placeholder="Username, email, нэр, утас, role" />
+            </label>
 
-    <AdminPager BasePath="/admin/users" Page="@users.Page" TotalPages="@users.TotalPages" Search="@Search" />
+            <label>
+                <span>Username</span>
+                <input name="username" value="@Username" placeholder="Ж: bat" />
+            </label>
+
+            <label>
+                <span>Email</span>
+                <input name="email" value="@Email" placeholder="Ж: bankdemo.mn" />
+            </label>
+
+            <label>
+                <span>Овог, нэр</span>
+                <input name="name" value="@Name" placeholder="Ж: Эрдэнэ, Бат" />
+            </label>
+
+            <label>
+                <span>Role</span>
+                <select name="role">
+                    <option value="">Бүгд</option>
+                    <option value="USER" selected="@(Role == "USER")">USER</option>
+                    <option value="ADMIN" selected="@(Role == "ADMIN")">ADMIN</option>
+                </select>
+            </label>
+
+            <label>
+                <span>Төлөв</span>
+                <select name="status">
+                    <option value="">Бүгд</option>
+                    <option value="ACTIVE" selected="@(Status == "ACTIVE")">Идэвхтэй</option>
+                    <option value="INACTIVE" selected="@(Status == "INACTIVE")">Идэвхгүй</option>
+                </select>
+            </label>
+
+            <label>
+                <span>Бүртгэсэн эхлэх</span>
+                <input type="date" name="createdFrom" value="@FormatDateInput(CreatedFrom)" />
+            </label>
+
+            <label>
+                <span>Бүртгэсэн дуусах</span>
+                <input type="date" name="createdTo" value="@FormatDateInput(CreatedTo)" />
+            </label>
+
+            <label>
+                <span>Нэг хуудсанд</span>
+                <select name="pageSize">
+                    <option value="20" selected="@(PageSize == 20)">20 мөр</option>
+                    <option value="50" selected="@(PageSize == 50)">50 мөр</option>
+                    <option value="100" selected="@(PageSize == 100)">100 мөр</option>
+                </select>
+            </label>
+
+            <div class="admin-users-filter-actions">
+                <button class="btn btn-primary" type="submit">Хайх</button>
+                <a class="btn btn-outline-secondary" href="/admin/users">Цэвэрлэх</a>
+            </div>
+        </form>
+    </section>
+
+    <div class="admin-users-result-meta">
+        <span>Нийт @users.TotalItems.ToString("N0") хэрэглэгч олдлоо.</span>
+        <span>Энэ хуудсанд @users.Items.Count.ToString("N0") мөр харагдаж байна.</span>
+    </div>
+
+    @if (users.Items.Count == 0)
+    {
+        <div class="admin-users-empty">Хайлтын нөхцөлд тохирох хэрэглэгч олдсонгүй.</div>
+    }
+    else
+    {
+        <div class="admin-users-table-wrap">
+            <table class="table table-striped align-middle" data-client-sort="true">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Нэр, овог</th>
+                        <th>Утас</th>
+                        <th>Role</th>
+                        <th>Төлөв</th>
+                        <th>Бүртгэсэн огноо</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in users.Items)
+                    {
+                        <tr>
+                            <td>@user.Username</td>
+                            <td>@user.Email</td>
+                            <td>@(user.FullName ?? "-")</td>
+                            <td>@(user.PhoneNumber ?? "-")</td>
+                            <td><span class="admin-users-role">@user.Role</span></td>
+                            <td><span class="admin-users-status @(user.IsActive ? "is-active" : "is-inactive")">@DisplayActive(user.IsActive)</span></td>
+                            <td>@user.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td class="text-end">
+                                <div class="d-inline-flex align-items-center justify-content-end gap-2">
+                                    <a class="btn btn-sm btn-outline-primary" href="/admin/users/@user.Id/profile">Засах</a>
+                                    <form method="post" action="/admin/users/toggle-status">
+                                        <input type="hidden" name="UserId" value="@user.Id" />
+                                        <input type="hidden" name="IsActive" value="@(user.IsActive ? "false" : "true")" />
+                                        <input type="hidden" name="ReturnUrl" value="@BuildPageHref(users.Page)" />
+                                        <button class="btn p-0 border-0 bg-transparent"
+                                                type="submit"
+                                                title="Төлөв солих"
+                                                disabled="@(CurrentUser.UserId == user.Id && user.IsActive)">
+                                            <span class="admin-users-toggle @(user.IsActive ? "is-on" : "")">
+                                                <span></span>
+                                            </span>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (users.TotalPages > 1)
+        {
+            <nav class="admin-users-pager" aria-label="Admin users pagination">
+                <a class="btn btn-sm btn-outline-secondary @(users.Page <= 1 ? "disabled" : "")" href="@BuildPageHref(users.Page - 1)">Өмнөх</a>
+                <span>@users.Page / @users.TotalPages</span>
+                <a class="btn btn-sm btn-outline-secondary @(users.Page >= users.TotalPages ? "disabled" : "")" href="@BuildPageHref(users.Page + 1)">Дараах</a>
+            </nav>
+        }
+    }
 }
 
 @code {
@@ -100,7 +169,31 @@ else if (!isLoading)
     public string? Search { get; set; }
 
     [SupplyParameterFromQuery]
+    public string? Username { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Email { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Name { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Role { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Status { get; set; }
+
+    [SupplyParameterFromQuery]
+    public DateOnly? CreatedFrom { get; set; }
+
+    [SupplyParameterFromQuery]
+    public DateOnly? CreatedTo { get; set; }
+
+    [SupplyParameterFromQuery]
     public int Page { get; set; } = 1;
+
+    [SupplyParameterFromQuery]
+    public int PageSize { get; set; } = 20;
 
     [SupplyParameterFromQuery]
     public string? Success { get; set; }
@@ -108,13 +201,61 @@ else if (!isLoading)
     [SupplyParameterFromQuery]
     public string? Error { get; set; }
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        users = await AdminService.GetUsersAsync(Search, Page);
+        isLoading = true;
+        Page = Math.Max(Page, 1);
+        PageSize = NormalizePageSize(PageSize);
+
+        var filter = new AdminUserFilterDto
+        {
+            Search = Search,
+            Username = Username,
+            Email = Email,
+            Name = Name,
+            Role = Role,
+            Status = Status,
+            CreatedFrom = CreatedFrom,
+            CreatedTo = CreatedTo
+        };
+
+        users = await AdminService.GetUsersAsync(filter, Page, PageSize);
         isLoading = false;
     }
 
-    private string CurrentPageUrl => "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+    private string BuildPageHref(int page)
+    {
+        var query = new List<string> { $"page={page}", $"pageSize={NormalizePageSize(PageSize)}" };
+
+        AddQuery(query, "search", Search);
+        AddQuery(query, "username", Username);
+        AddQuery(query, "email", Email);
+        AddQuery(query, "name", Name);
+        AddQuery(query, "role", Role);
+        AddQuery(query, "status", Status);
+        AddQuery(query, "createdFrom", FormatDateInput(CreatedFrom));
+        AddQuery(query, "createdTo", FormatDateInput(CreatedTo));
+
+        return $"/admin/users?{string.Join("&", query)}";
+    }
+
+    private static void AddQuery(List<string> query, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            query.Add($"{key}={Uri.EscapeDataString(value)}");
+        }
+    }
+
+    private static string? FormatDateInput(DateOnly? value)
+    {
+        return value?.ToString("yyyy-MM-dd");
+    }
+
+    private static int NormalizePageSize(int value)
+    {
+        return value is 50 or 100 ? value : 20;
+    }
 
     private static string DisplayActive(bool isActive)
     {

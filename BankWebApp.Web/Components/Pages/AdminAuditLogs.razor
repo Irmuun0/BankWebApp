@@ -67,7 +67,7 @@ else
                     <th>Target</th>
                     <th>Summary</th>
                     <th>Severity</th>
-                    <th></th>
+                    <th class="audit-action-column"><span class="visually-hidden">Үйлдэл</span></th>
                 </tr>
             </thead>
             <tbody>
@@ -81,8 +81,14 @@ else
                         <td>@FormatTarget(item)</td>
                         <td class="audit-summary">@item.Summary</td>
                         <td><span class="badge @SeverityBadgeClass(item.Severity)">@item.Severity</span></td>
-                        <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary" type="button" @onclick="() => OpenDetail(item)">Дэлгэрэнгүй</button>
+                        <td class="audit-action-column">
+                            <button class="audit-detail-button"
+                                    type="button"
+                                    title="Дэлгэрэнгүй харах"
+                                    aria-label="@($"{item.ActionLabel} үйлдлийн дэлгэрэнгүйг харах")"
+                                    @onclick="() => OpenDetail(item)">
+                                <span aria-hidden="true">⋮</span>
+                            </button>
                         </td>
                     </tr>
                 }
@@ -174,6 +180,37 @@ else
         text-overflow: ellipsis;
     }
 
+    .audit-action-column {
+        width: 58px;
+        min-width: 58px;
+        padding-inline: .55rem !important;
+        text-align: center;
+    }
+
+    .audit-detail-button {
+        display: inline-grid;
+        width: 40px;
+        height: 40px;
+        place-items: center;
+        border: 1px solid #d4deed;
+        border-radius: 50%;
+        background: #fff;
+        color: #123f9c;
+        cursor: pointer;
+        font: 800 1.35rem/1 Inter, "Noto Sans", sans-serif;
+        transition: border-color .16s ease, background-color .16s ease, color .16s ease;
+    }
+
+    .audit-detail-button:hover {
+        border-color: #123f9c;
+        background: #eef4ff;
+    }
+
+    .audit-detail-button:focus-visible {
+        outline: 3px solid rgba(18, 63, 156, .22);
+        outline-offset: 2px;
+    }
+
     .audit-modal-backdrop {
         position: fixed;
         inset: 0;
@@ -221,7 +258,15 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        auditLogs = await AdminService.GetAuditLogsAsync(Source, Search, StartDate, EndDate, Page);
+        auditLogs = await AdminService.GetAuditLogsAsync(
+            new AdminAuditLogFilterDto
+            {
+                Source = Source,
+                Search = Search,
+                StartDate = StartDate,
+                EndDate = EndDate
+            },
+            Page);
         isLoading = false;
     }
 

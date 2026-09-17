@@ -1,0 +1,349 @@
+@page "/admin/registration-requests"
+@attribute [Authorize(Roles = "ADMIN")]
+@implements IDisposable
+@inject IUserRegistrationService RegistrationService
+@inject NavigationManager Navigation
+@inject IHttpContextAccessor HttpContextAccessor
+@inject PersistentComponentState ApplicationState
+
+<PageTitle>Админ - Бүртгэлийн хүсэлт</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="profile-toast profile-toast-success" role="status">@Success</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="profile-toast profile-toast-error" role="alert">@Error</div>
+}
+
+@if (oneTimeCredential is not null)
+{
+    <section class="registration-credential-once" role="status" aria-live="polite">
+        <div>
+            <strong>Түр нэвтрэх мэдээлэл</strong>
+            <p>Энэ мэдээлэл дахин харагдахгүй. Хэрэглэгчид сонгосон хамгаалалттай сувгаар дамжуулна уу.</p>
+        </div>
+        <dl>
+            <div><dt>Username</dt><dd>@oneTimeCredential.Username</dd></div>
+            <div><dt>Түр нууц үг</dt><dd class="numeric-cell">@oneTimeCredential.TemporaryPassword</dd></div>
+        </dl>
+    </section>
+}
+
+@if (isLoading)
+{
+    <AppLoading Title="Бүртгэлийн хүсэлтүүдийг уншиж байна" Message="Хүсэлтийн жагсаалтыг өгөгдлийн сангаас авч байна." />
+}
+else
+{
+    <section class="registration-filter-card">
+        <form method="get" action="/admin/registration-requests" class="registration-filter-grid">
+            <input type="hidden" name="page" value="1" />
+            <label>
+                <span>Хайлт</span>
+                <input name="search" value="@Search" placeholder="Нэр, username, email, утас, регистр" />
+            </label>
+            <label>
+                <span>Төлөв</span>
+                <select name="status">
+                    <option value="">Бүгд</option>
+                    <option value="PENDING" selected="@(Status == "PENDING")">Хүлээгдэж буй</option>
+                    <option value="NEEDS_INFO" selected="@(Status == "NEEDS_INFO")">Нэмэлт мэдээлэл</option>
+                    <option value="APPROVED" selected="@(Status == "APPROVED")">Зөвшөөрсөн</option>
+                    <option value="REJECTED" selected="@(Status == "REJECTED")">Татгалзсан</option>
+                </select>
+            </label>
+            <label>
+                <span>Эхлэх огноо</span>
+                <input type="date" name="createdFrom" value="@FormatDateInput(CreatedFrom)" />
+            </label>
+            <label>
+                <span>Дуусах огноо</span>
+                <input type="date" name="createdTo" value="@FormatDateInput(CreatedTo)" />
+            </label>
+            <label>
+                <span>Мөр</span>
+                <select name="pageSize">
+                    <option value="20" selected="@(PageSize == 20)">20</option>
+                    <option value="50" selected="@(PageSize == 50)">50</option>
+                    <option value="100" selected="@(PageSize == 100)">100</option>
+                </select>
+            </label>
+            <div class="registration-filter-actions">
+                <button class="btn btn-primary" type="submit">Шүүх</button>
+                <a class="btn btn-outline-secondary" href="/admin/registration-requests">Цэвэрлэх</a>
+            </div>
+        </form>
+    </section>
+
+    <div class="admin-users-result-meta">
+        <span>Нийт @requests.TotalItems.ToString("N0") хүсэлт.</span>
+        <span>Энэ хуудсанд @requests.Items.Count.ToString("N0") мөр байна.</span>
+    </div>
+
+    @if (requests.Items.Count == 0)
+    {
+        <div class="admin-users-empty">Одоогоор тохирох бүртгэлийн хүсэлт алга.</div>
+    }
+    else
+    {
+        <div class="admin-users-table-wrap">
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Огноо</th>
+                        <th>Хүсэлт гаргагч</th>
+                        <th>Username</th>
+                        <th>Холбоо барих</th>
+                        <th>Төлөв</th>
+                        <th>Хариу</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in requests.Items)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@item.CreatedAt.ToString("yyyy-MM-dd")</strong>
+                                <span class="table-muted">@item.CreatedAt.ToString("HH:mm")</span>
+                            </td>
+                            <td>
+                                <strong>@item.FullName</strong>
+                                <span class="table-muted">@item.NationalId</span>
+                            </td>
+                            <td>@item.RequestedUsername</td>
+                            <td>
+                                <strong>@item.Email</strong>
+                                <span class="table-muted">@item.PhoneNumber</span>
+                            </td>
+                            <td><span class="registration-status registration-status-@item.Status.ToLowerInvariant()">@FormatStatus(item.Status)</span></td>
+                            <td>@FormatContact(item.PreferredContactMethod)</td>
+                            <td class="text-end">
+                                <a class="btn btn-outline-primary btn-sm" href="@BuildPageUrl(SelectedRequestId: item.Id)">Дэлгэрэнгүй</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (requests.TotalItems > requests.PageSize)
+    {
+        <div class="pagination-actions">
+            <a class="btn btn-outline-secondary @(Page <= 1 ? "disabled" : null)" href="@BuildPageUrl(Page - 1)">Өмнөх</a>
+            <span>@Page / @TotalPages</span>
+            <a class="btn btn-outline-secondary @(Page >= TotalPages ? "disabled" : null)" href="@BuildPageUrl(Page + 1)">Дараах</a>
+        </div>
+    }
+
+    @if (selectedRequest is not null)
+    {
+        <div class="registration-modal" role="dialog" aria-modal="true">
+            <a class="registration-modal-backdrop" href="@BuildPageUrl(SelectedRequestId: null)" aria-label="Хаах"></a>
+            <section class="registration-modal-panel">
+                <div class="registration-modal-head">
+                    <div>
+                        <span class="registration-kicker">Бүртгэлийн хүсэлт #@selectedRequest.Id</span>
+                        <h3>@selectedRequest.FullName</h3>
+                        <p>@selectedRequest.RequestedUsername · @FormatStatus(selectedRequest.Status)</p>
+                    </div>
+                    <a class="registration-close" href="@BuildPageUrl(SelectedRequestId: null)" aria-label="Хаах">×</a>
+                </div>
+
+                <div class="registration-detail-grid">
+                    <div><span>Email</span><strong>@selectedRequest.Email</strong></div>
+                    <div><span>Утас</span><strong>@selectedRequest.PhoneNumber</strong></div>
+                    <div><span>Яаралтай холбоо</span><strong>@(selectedRequest.EmergencyPhoneNumber ?? "-")</strong></div>
+                    <div><span>Регистр</span><strong>@selectedRequest.NationalId</strong></div>
+                    <div><span>Хариу авах</span><strong>@FormatContact(selectedRequest.PreferredContactMethod)</strong></div>
+                    <div><span>Огноо</span><strong>@selectedRequest.CreatedAt.ToString("yyyy-MM-dd HH:mm")</strong></div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(selectedRequest.RequestNote))
+                {
+                    <div class="registration-note">
+                        <span>Хэрэглэгчийн тайлбар</span>
+                        <p>@selectedRequest.RequestNote</p>
+                    </div>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(selectedRequest.DecisionMessage))
+                {
+                    <div class="registration-decision-message">
+                        <span>Хүсэлтийн хариу</span>
+                        <p>@selectedRequest.DecisionMessage</p>
+                    </div>
+                }
+
+                @if (selectedRequest.CreatedUserId is not null)
+                {
+                    <a class="btn btn-primary" href="@($"/admin/users/{selectedRequest.CreatedUserId}/profile")">Үүссэн хэрэглэгчийг харах</a>
+                }
+                else
+                {
+                    <form method="post" action="/admin/registration-requests/review" class="registration-review-form">
+                        <input type="hidden" name="RequestId" value="@selectedRequest.Id" />
+                        <input type="hidden" name="ReturnUrl" value="@CurrentUrl" />
+                        <label>
+                            <span>Админы тэмдэглэл</span>
+                            <textarea name="AdminNote" rows="3" placeholder="Хянасан тэмдэглэл...">@selectedRequest.AdminNote</textarea>
+                        </label>
+                        <label>
+                            <span>Хэрэглэгчид өгөх хариу (хоосон үлдээвэл систем автоматаар үүсгэнэ)</span>
+                            <textarea name="DecisionMessage" rows="3">@selectedRequest.DecisionMessage</textarea>
+                        </label>
+                        <div class="registration-review-actions">
+                            <button class="btn btn-primary" type="submit" name="Decision" value="APPROVED">Зөвшөөрч хэрэглэгч үүсгэх</button>
+                            <button class="btn btn-outline-secondary" type="submit" name="Decision" value="NEEDS_INFO">Нэмэлт мэдээлэл шаардах</button>
+                            <button class="btn btn-outline-danger" type="submit" name="Decision" value="REJECTED">Татгалзах</button>
+                        </div>
+                    </form>
+                }
+            </section>
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery] public string? Search { get; set; }
+    [SupplyParameterFromQuery] public string? Status { get; set; }
+    [SupplyParameterFromQuery] public DateOnly? CreatedFrom { get; set; }
+    [SupplyParameterFromQuery] public DateOnly? CreatedTo { get; set; }
+    [SupplyParameterFromQuery] public int Page { get; set; } = 1;
+    [SupplyParameterFromQuery] public int PageSize { get; set; } = 20;
+    [SupplyParameterFromQuery(Name = "requestId")] public long? SelectedRequestId { get; set; }
+    [SupplyParameterFromQuery] public string? Success { get; set; }
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? CredentialKey { get; set; }
+
+    private bool isLoading = true;
+    private AdminPagedResultDto<AdminRegistrationRequestDto> requests = new();
+    private AdminRegistrationRequestDto? selectedRequest;
+    private OneTimeRegistrationCredentialDto? oneTimeCredential;
+    private PersistingComponentStateSubscription? persistingSubscription;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(requests.TotalItems / (double)Math.Max(requests.PageSize, 1)));
+    private string CurrentUrl => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("admin/registration-requests", StringComparison.OrdinalIgnoreCase)
+        ? "/" + Navigation.ToBaseRelativePath(Navigation.Uri)
+        : "/admin/registration-requests";
+
+    protected override void OnInitialized()
+    {
+        persistingSubscription = ApplicationState.RegisterOnPersisting(PersistOneTimeCredential);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        ConsumeOneTimeCredential();
+        var page = Page <= 0 ? 1 : Page;
+        var pageSize = PageSize is 50 or 100 ? PageSize : 20;
+        Page = page;
+        PageSize = pageSize;
+        requests = await RegistrationService.GetRequestsAsync(
+            new AdminRegistrationRequestFilterDto
+            {
+                Search = Search,
+                Status = Status,
+                CreatedFrom = CreatedFrom,
+                CreatedTo = CreatedTo
+            },
+            page,
+            pageSize);
+
+        selectedRequest = SelectedRequestId is long id
+            ? await RegistrationService.GetRequestAsync(id)
+            : null;
+
+        isLoading = false;
+    }
+
+    private void ConsumeOneTimeCredential()
+    {
+        if (oneTimeCredential is not null)
+        {
+            return;
+        }
+
+        if (ApplicationState.TryTakeFromJson<OneTimeRegistrationCredentialDto>(
+                nameof(OneTimeRegistrationCredentialDto),
+                out var persistedCredential))
+        {
+            oneTimeCredential = persistedCredential;
+            return;
+        }
+
+        if (
+            string.IsNullOrWhiteSpace(CredentialKey) ||
+            !CredentialKey.StartsWith("registration-credential:", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var session = HttpContextAccessor.HttpContext?.Session;
+        var serialized = session?.GetString(CredentialKey);
+        session?.Remove(CredentialKey);
+        if (string.IsNullOrWhiteSpace(serialized))
+        {
+            return;
+        }
+
+        try
+        {
+            oneTimeCredential = System.Text.Json.JsonSerializer.Deserialize<OneTimeRegistrationCredentialDto>(serialized);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            oneTimeCredential = null;
+        }
+    }
+
+    private Task PersistOneTimeCredential()
+    {
+        if (oneTimeCredential is not null)
+        {
+            ApplicationState.PersistAsJson(nameof(OneTimeRegistrationCredentialDto), oneTimeCredential);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        persistingSubscription?.Dispose();
+    }
+
+    private string BuildPageUrl(int? page = null, long? SelectedRequestId = null)
+    {
+        var query = new Dictionary<string, object?>
+        {
+            ["search"] = Search,
+            ["status"] = Status,
+            ["createdFrom"] = FormatDateInput(CreatedFrom),
+            ["createdTo"] = FormatDateInput(CreatedTo),
+            ["page"] = page ?? Page,
+            ["pageSize"] = PageSize,
+            ["requestId"] = SelectedRequestId,
+            ["credentialKey"] = (string?)null
+        };
+
+        return Navigation.GetUriWithQueryParameters("/admin/registration-requests", query);
+    }
+
+    private static string? FormatDateInput(DateOnly? value) => value?.ToString("yyyy-MM-dd");
+
+    private static string FormatStatus(string value) => value switch
+    {
+        "PENDING" => "Хүлээгдэж буй",
+        "APPROVED" => "Зөвшөөрсөн",
+        "REJECTED" => "Татгалзсан",
+        "NEEDS_INFO" => "Нэмэлт мэдээлэл",
+        _ => value
+    };
+
+    private static string FormatContact(string value) => value == "PHONE" ? "Утас" : "Email";
+}

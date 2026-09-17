@@ -23,20 +23,32 @@
     [Parameter]
     public string? ReviewStatus { get; set; }
 
+    [Parameter]
+    public IReadOnlyDictionary<string, string?>? Query { get; set; }
+
     private string BuildHref(int page)
     {
         var query = new List<string> { $"page={page}" };
 
-        if (!string.IsNullOrWhiteSpace(Search))
-        {
-            query.Add($"search={Uri.EscapeDataString(Search)}");
-        }
+        AddQuery(query, "search", Search);
+        AddQuery(query, "reviewStatus", ReviewStatus);
 
-        if (!string.IsNullOrWhiteSpace(ReviewStatus))
+        if (Query is not null)
         {
-            query.Add($"reviewStatus={Uri.EscapeDataString(ReviewStatus)}");
+            foreach (var item in Query)
+            {
+                AddQuery(query, item.Key, item.Value);
+            }
         }
 
         return $"{BasePath}?{string.Join("&", query)}";
+    }
+
+    private static void AddQuery(List<string> query, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && !query.Any(item => item.StartsWith($"{key}=", StringComparison.OrdinalIgnoreCase)))
+        {
+            query.Add($"{Uri.EscapeDataString(key)}={Uri.EscapeDataString(value)}");
+        }
     }
 }

@@ -36,7 +36,7 @@ else
         </div>
     </section>
 
-    <form method="post" action="/profile/update" class="profile-grid">
+    <form method="post" action="/profile/update" class="profile-grid" data-dirty-check="true">
         <input type="hidden" name="ReturnUrl" value="/profile" />
 
         <section class="profile-card profile-primary">
@@ -116,7 +116,7 @@ else
 
         <div class="profile-actions">
             <a class="profile-secondary-button" href="@BackHref">Буцах</a>
-            <button class="profile-primary-button" type="submit">Хадгалах</button>
+            <button class="profile-primary-button" type="submit" disabled>Хадгалах</button>
         </div>
     </form>
 }
@@ -149,8 +149,7 @@ else
 
     private static string DisplayName(UserProfileDto item)
     {
-        var name = $"{item.FirstName} {item.LastName}".Trim();
-        return string.IsNullOrWhiteSpace(name) ? item.Username : name;
+        return UserDisplayNameFormatter.Format(item.FirstName, item.LastName, item.Username);
     }
 
     private static string GetInitial(UserProfileDto item)

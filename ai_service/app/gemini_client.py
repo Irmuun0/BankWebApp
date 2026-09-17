@@ -11,6 +11,7 @@ import re
 import socket
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from decimal import Decimal
 from typing import Any
 
@@ -30,6 +31,88 @@ ALLOWED_MODEL_NAMES = {
     "gemini-3.5-flash",
 }
 SAFE_DEFAULT_MODEL = "gemini-3.1-flash-lite"
+
+
+def check_gemini_readiness() -> dict[str, object | None]:
+    """Check Gemini readiness without allowing a slow network call to block health checks."""
+
+    timeout_seconds = min(settings.gemini_timeout_seconds, 8)
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini-health")
+    future = executor.submit(_probe_gemini_readiness, timeout_seconds)
+    try:
+        return future.result(timeout=timeout_seconds + 1)
+    except FutureTimeoutError:
+        future.cancel()
+        return {
+            "keyConfigured": bool(settings.gemini_api_key),
+            "apiReachable": False,
+            "modelAvailable": False,
+            "modelName": _resolve_model_name(None),
+            "baseUrl": settings.gemini_base_url,
+            "message": f"Gemini readiness probe exceeded {timeout_seconds} seconds.",
+        }
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _probe_gemini_readiness(timeout_seconds: int) -> dict[str, object | None]:
+    """Probe model metadata without consuming a content-generation request."""
+
+    selected_model = _resolve_model_name(None)
+    if not settings.gemini_api_key:
+        return {
+            "keyConfigured": False,
+            "apiReachable": False,
+            "modelAvailable": False,
+            "modelName": selected_model,
+            "baseUrl": settings.gemini_base_url,
+            "message": "GEMINI_API_KEY is not configured.",
+        }
+
+    url = f"{settings.gemini_base_url.rstrip('/')}/models/{selected_model}"
+    request = urllib.request.Request(
+        url,
+        headers={"x-goog-api-key": settings.gemini_api_key},
+        method="GET",
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        supported_methods = payload.get("supportedGenerationMethods") or []
+        model_available = "generateContent" in supported_methods
+        return {
+            "keyConfigured": True,
+            "apiReachable": True,
+            "modelAvailable": model_available,
+            "modelName": selected_model,
+            "baseUrl": settings.gemini_base_url,
+            "message": (
+                "Gemini model is reachable and supports generateContent."
+                if model_available
+                else "Configured model does not advertise generateContent support."
+            ),
+        }
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        return {
+            "keyConfigured": True,
+            "apiReachable": True,
+            "modelAvailable": False,
+            "modelName": selected_model,
+            "baseUrl": settings.gemini_base_url,
+            "message": f"Gemini metadata probe failed: HTTP {exc.code} - {_extract_error_message(body)}",
+        }
+    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
+        reason = getattr(exc, "reason", str(exc))
+        return {
+            "keyConfigured": True,
+            "apiReachable": False,
+            "modelAvailable": False,
+            "modelName": selected_model,
+            "baseUrl": settings.gemini_base_url,
+            "message": f"Gemini endpoint is unreachable: {reason}",
+        }
 
 
 def analyze_transaction(context: GeminiAnalysisContext, model_name: str | None = None) -> GeminiAnalysisResponse:

@@ -2,13 +2,13 @@
 
 @if (Receipt is not null)
 {
-    <div class="modal-backdrop show"></div>
-    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true">
-        <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-backdrop show" @onclick="CloseAsync"></div>
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" @onclick="CloseAsync">
+        <div class="modal-dialog modal-dialog-centered" @onclick:stopPropagation="true">
             <div class="modal-content">
                 <div class="modal-header">
                     <h2 class="modal-title h5">Гүйлгээний дэлгэрэнгүй</h2>
-                    <a class="btn-close" href="@CloseHref" aria-label="Хаах"></a>
+                    <button type="button" class="btn-close" aria-label="Хаах" @onclick="CloseAsync"></button>
                 </div>
                 <div class="modal-body">
                     <dl class="row mb-0">
@@ -35,7 +35,7 @@
                     </dl>
                 </div>
                 <div class="modal-footer">
-                    <a class="btn btn-primary" href="@CloseHref">Хаах</a>
+                    <button type="button" class="btn btn-primary" @onclick="CloseAsync">Хаах</button>
                 </div>
             </div>
         </div>
@@ -48,4 +48,21 @@
 
     [Parameter]
     public string CloseHref { get; set; } = "/";
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Inject]
+    private NavigationManager Navigation { get; set; } = default!;
+
+    private async Task CloseAsync()
+    {
+        if (OnClose.HasDelegate)
+        {
+            await OnClose.InvokeAsync();
+            return;
+        }
+
+        Navigation.NavigateTo(CloseHref, replace: true);
+    }
 }

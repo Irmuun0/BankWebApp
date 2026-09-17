@@ -165,7 +165,14 @@ else if (!isLoading)
         effectiveStartDate = TryParseDate(StartDate) ?? new DateOnly(today.Year, today.Month, 1);
         effectiveEndDate = TryParseDate(EndDate) ?? today;
 
-        report = await AdminService.GetFxIncomeReportAsync(effectiveStartDate, effectiveEndDate, Search, Page);
+        report = await AdminService.GetFxIncomeReportAsync(
+            new AdminFxIncomeFilterDto
+            {
+                StartDate = effectiveStartDate,
+                EndDate = effectiveEndDate,
+                Search = Search
+            },
+            Page);
         effectiveStartDate = report.Summary.StartDate;
         effectiveEndDate = report.Summary.EndDate;
         isLoading = false;
@@ -197,8 +204,8 @@ else if (!isLoading)
     {
         return incomeType switch
         {
-            "BUY_SPREAD" => "Авах spread",
-            "SELL_SPREAD" => "Зарах spread",
+            "FX_BUY_SPREAD" => "Авах spread",
+            "FX_SELL_SPREAD" => "Зарах spread",
             _ => incomeType
         };
     }

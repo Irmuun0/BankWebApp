@@ -49,7 +49,9 @@
                 <button class="chart-modal-close" type="button" aria-label="Хаах" @onclick="CloseExpandedChart">×</button>
             </div>
             <div class="chart-modal-body">
-                <BlazorBootstrap.LineChart @ref="expandedLineChart" Width="1100" Height="520" />
+                <div class="chart-modal-plot">
+                    <BlazorBootstrap.LineChart @ref="expandedLineChart" Width="1100" Height="520" />
+                </div>
             </div>
         </div>
     </div>

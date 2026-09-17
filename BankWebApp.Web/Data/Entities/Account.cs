@@ -21,6 +21,12 @@ public partial class Account
 
     public bool IsActive { get; set; }
 
+    public bool IsAdminLocked { get; set; }
+
+    public DateTime? AdminLockedAt { get; set; }
+
+    public long? AdminLockedByUserId { get; set; }
+
     public bool IsPrimary { get; set; }
 
     public DateTime CreatedAt { get; set; }

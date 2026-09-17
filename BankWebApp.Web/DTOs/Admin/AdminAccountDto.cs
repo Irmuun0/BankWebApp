@@ -12,5 +12,7 @@ public class AdminAccountDto
     public decimal Balance { get; set; }
     public decimal DailyTransactionLimitMnt { get; set; }
     public bool IsActive { get; set; }
+    public bool IsAdminLocked { get; set; }
+    public DateTime? AdminLockedAt { get; set; }
     public DateTime CreatedAt { get; set; }
 }

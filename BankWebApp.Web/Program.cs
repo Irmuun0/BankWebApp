@@ -9,12 +9,16 @@ using BankWebApp.Web.DTOs.Accounts;
 using BankWebApp.Web.DTOs.Admin;
 using BankWebApp.Web.DTOs.Transactions;
 using BankWebApp.Web.DTOs.Profile;
+using BankWebApp.Web.DTOs.Health;
+using BankWebApp.Web.DTOs.Registration;
+using BankWebApp.Web.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using System.Globalization;
 using System.Security.Claims;
+using System.Text.Json;
 using BlazorBootstrap;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -55,6 +59,15 @@ builder.Services.AddDbContextFactory<BankDbContext>(options =>
     ServiceLifetime.Scoped);
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSession(options =>
+{
+    options.IdleTimeout = TimeSpan.FromMinutes(10);
+    options.Cookie.HttpOnly = true;
+    options.Cookie.IsEssential = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+});
 builder.Services.AddTransient<IAuthService, AuthService>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddTransient<IAccountService, AccountService>();
@@ -66,6 +79,9 @@ builder.Services.AddTransient<IProfileService, ProfileService>();
 builder.Services.AddTransient<ISecurityEventService, SecurityEventService>();
 builder.Services.AddTransient<IDatabaseClockService, DatabaseClockService>();
 builder.Services.AddTransient<IDatabaseTestService, DatabaseTestService>();
+builder.Services.AddTransient<IOperationalHealthService, OperationalHealthService>();
+builder.Services.AddTransient<IUserRegistrationService, UserRegistrationService>();
+builder.Services.AddScoped<IUiOverlayCoordinator, UiOverlayCoordinator>();
 builder.Services.AddHttpClient<IAiDetectionService, AiDetectionService>();
 builder.Services.AddHttpClient<IGeminiAnalysisService, GeminiAnalysisService>();
 builder.Services.AddHttpClient<IExchangeRateService, MongolBankExchangeRateService>();
@@ -82,6 +98,7 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 
+app.UseSession();
 app.UseAuthentication();
 app.Use(async (context, next) =>
 {
@@ -93,6 +110,7 @@ app.Use(async (context, next) =>
     var isTransactionPath = path.StartsWithSegments("/transactions");
     var isProfilePath = path.StartsWithSegments("/profile");
     var isProtectedPath = (isAdminPath && !isAdminLoginPath) || isUserPath || isAccountPath || isTransactionPath || isProfilePath;
+    var passwordResetRequired = false;
 
     if (isProtectedPath && context.User.Identity?.IsAuthenticated != true)
     {
@@ -108,20 +126,31 @@ app.Use(async (context, next) =>
         if (long.TryParse(userIdValue, out var signedInUserId))
         {
             var dbContext = context.RequestServices.GetRequiredService<BankDbContext>();
-            var isActive = await dbContext.Users
+            var userAccessState = await dbContext.Users
                 .AsNoTracking()
                 .Where(user => user.Id == signedInUserId)
-                .Select(user => user.IsActive)
+                .Select(user => new { user.IsActive, user.PasswordResetRequired })
                 .FirstOrDefaultAsync();
 
-            if (!isActive)
+            if (userAccessState is null || !userAccessState.IsActive)
             {
                 await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 var loginMode = isAdminPath ? "admin" : "user";
                 context.Response.Redirect($"/?login={loginMode}&error=Таны нэвтрэх эрх идэвхгүй болсон байна.");
                 return;
             }
+
+            passwordResetRequired = userAccessState.PasswordResetRequired;
         }
+    }
+
+    if (isProtectedPath
+        && context.User.Identity?.IsAuthenticated == true
+        && (passwordResetRequired || string.Equals(context.User.FindFirstValue("PasswordResetRequired"), "true", StringComparison.OrdinalIgnoreCase))
+        && !IsPasswordResetAllowedPath(path))
+    {
+        context.Response.Redirect(AppendQuery("/profile", "error", "Нууц үгээ шинэчлэх шаардлагатай байна."));
+        return;
     }
 
     if (isAdminPath && !isAdminLoginPath && !context.User.IsInRole("ADMIN"))
@@ -136,6 +165,28 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+
+app.MapPost("/registration/request", async (HttpContext context, IUserRegistrationService registrationService, CancellationToken cancellationToken) =>
+{
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var result = await registrationService.SubmitRequestAsync(
+        new CreateRegistrationRequestDto
+        {
+            FirstName = form["FirstName"].ToString(),
+            LastName = form["LastName"].ToString(),
+            RequestedUsername = form["RequestedUsername"].ToString(),
+            Email = form["Email"].ToString(),
+            PhoneNumber = form["PhoneNumber"].ToString(),
+            NationalId = form["NationalId"].ToString(),
+            EmergencyPhoneNumber = form["EmergencyPhoneNumber"].ToString(),
+            PreferredContactMethod = form["PreferredContactMethod"].ToString(),
+            RequestNote = form["RequestNote"].ToString()
+        },
+        cancellationToken);
+
+    var queryName = result.Success ? "registrationSuccess" : "registrationError";
+    return Results.Redirect(AppendQuery("/", queryName, result.ErrorMessage ?? "Registration request processed."));
+}).AllowAnonymous();
 
 app.MapPost("/auth/login", async (HttpContext context, IAuthService authService, CancellationToken cancellationToken) =>
 {
@@ -171,6 +222,7 @@ app.MapPost("/auth/login", async (HttpContext context, IAuthService authService,
         new(ClaimTypes.Name, result.Username ?? string.Empty),
         new(ClaimTypes.Role, result.Role ?? "USER"),
         new("FullName", result.FullName ?? string.Empty),
+        new("PasswordResetRequired", result.PasswordResetRequired ? "true" : "false"),
         new(AuthConstants.SessionExpiresUtcTicksClaim, expiresUtc.UtcDateTime.Ticks.ToString(CultureInfo.InvariantCulture))
     };
 
@@ -191,6 +243,11 @@ app.MapPost("/auth/login", async (HttpContext context, IAuthService authService,
     var fallbackUrl = string.Equals(result.Role, "ADMIN", StringComparison.OrdinalIgnoreCase)
         ? "/admin/dashboard"
         : "/dashboard";
+
+    if (result.PasswordResetRequired)
+    {
+        return Results.Redirect(AppendQuery("/profile", "error", "Нууц үгээ шинэчлэх шаардлагатай байна."));
+    }
 
     return Results.Redirect(GetSafeLocalUrl(returnUrl, fallbackUrl));
 });
@@ -226,13 +283,14 @@ app.MapPost("/profile/update", async (HttpContext context, IProfileService profi
     var profile = result.Profile;
     var role = context.User.FindFirstValue(ClaimTypes.Role) ?? profile.Role;
     var expiresUtc = GetCurrentSessionExpiry(context, role);
-    var fullName = $"{profile.FirstName} {profile.LastName}".Trim();
+    var fullName = UserDisplayNameFormatter.Format(profile.FirstName, profile.LastName);
     var claims = new List<Claim>
     {
         new(ClaimTypes.NameIdentifier, profile.UserId.ToString(CultureInfo.InvariantCulture)),
         new(ClaimTypes.Name, profile.Username),
         new(ClaimTypes.Role, role),
         new("FullName", fullName),
+        new("PasswordResetRequired", profile.PasswordResetRequired ? "true" : "false"),
         new(AuthConstants.SessionExpiresUtcTicksClaim, expiresUtc.UtcDateTime.Ticks.ToString(CultureInfo.InvariantCulture))
     };
 
@@ -339,6 +397,122 @@ app.MapPost("/admin/users/toggle-status", async (HttpContext context, IAdminServ
     var result = await adminService.SetUserActiveStatusAsync(adminUserId, userId, isActive, cancellationToken);
     var queryName = result.Success ? "success" : "error";
     return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Хүсэлт боловсруулах үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/users/profile/update", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/users");
+    if (!long.TryParse(form["UserId"].ToString(), out var userId))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Хэрэглэгчийн мэдээлэл буруу байна."));
+    }
+
+    var result = await adminService.UpdateUserProfileAsync(
+        adminUserId,
+        new UpdateAdminUserProfileDto
+        {
+            UserId = userId,
+            Username = form["Username"].ToString(),
+            Email = form["Email"].ToString(),
+            FirstName = form["FirstName"].ToString(),
+            LastName = form["LastName"].ToString(),
+            PhoneNumber = form["PhoneNumber"].ToString(),
+            EmergencyPhoneNumber = form["EmergencyPhoneNumber"].ToString()
+        },
+        cancellationToken);
+
+    var queryName = result.Success ? "success" : "error";
+    return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Хүсэлт боловсруулах үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/users/profile/password-reset-required", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/users");
+    if (!long.TryParse(form["UserId"].ToString(), out var userId)
+        || !TryReadBoolean(form["IsRequired"].ToString(), out var isRequired))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Нууц үг шинэчлэх шаардлагын хүсэлт буруу байна."));
+    }
+
+    var result = await adminService.SetUserPasswordResetRequiredAsync(adminUserId, userId, isRequired, cancellationToken);
+    var queryName = result.Success ? "success" : "error";
+    return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Хүсэлт боловсруулах үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/users/profile/unlock", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Та%20нэвтрээгүй%20байна.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/users");
+    if (!long.TryParse(form["UserId"].ToString(), out var userId))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Хэрэглэгчийн мэдээлэл буруу байна."));
+    }
+
+    var result = await adminService.UnlockUserAsync(adminUserId, userId, cancellationToken);
+    var queryName = result.Success ? "success" : "error";
+    return Results.Redirect(AppendQuery(returnUrl, queryName, result.ErrorMessage ?? "Хүсэлт боловсруулах үед алдаа гарлаа."));
+}).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
+
+app.MapPost("/admin/registration-requests/review", async (HttpContext context, IUserRegistrationService registrationService, CancellationToken cancellationToken) =>
+{
+    if (!TryReadCurrentUserId(context, out var adminUserId))
+    {
+        return Results.Redirect("/admin/login?error=Not%20signed%20in.");
+    }
+
+    var form = await context.Request.ReadFormAsync(cancellationToken);
+    var returnUrl = GetSafeLocalUrl(form["ReturnUrl"].ToString(), "/admin/registration-requests");
+    if (!long.TryParse(form["RequestId"].ToString(), out var requestId))
+    {
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Registration request is invalid."));
+    }
+
+    var result = await registrationService.ReviewRequestAsync(
+        adminUserId,
+        new ReviewRegistrationRequestDto
+        {
+            RequestId = requestId,
+            Decision = form["Decision"].ToString(),
+            AdminNote = form["AdminNote"].ToString(),
+            DecisionMessage = form["DecisionMessage"].ToString()
+        },
+        cancellationToken);
+
+    var queryName = result.Success ? "success" : "error";
+    var redirectUrl = AppendQuery(returnUrl, queryName, result.Message ?? "Registration request processed.");
+    if (result.Success &&
+        !string.IsNullOrWhiteSpace(result.TemporaryPassword) &&
+        !string.IsNullOrWhiteSpace(result.Username))
+    {
+        var credentialKey = $"registration-credential:{Guid.NewGuid():N}";
+        var credential = new OneTimeRegistrationCredentialDto
+        {
+            RequestId = requestId,
+            Username = result.Username,
+            TemporaryPassword = result.TemporaryPassword
+        };
+        context.Session.SetString(credentialKey, JsonSerializer.Serialize(credential));
+        redirectUrl = AppendQuery(redirectUrl, "credentialKey", credentialKey);
+    }
+
+    return Results.Redirect(redirectUrl);
 }).RequireAuthorization(policy => policy.RequireRole("ADMIN"));
 
 app.MapPost("/admin/accounts/toggle-status", async (HttpContext context, IAdminService adminService, CancellationToken cancellationToken) =>
@@ -455,10 +629,10 @@ app.MapPost("/admin/suspicious-transactions/escalate", async (HttpContext contex
         return Results.Redirect(AppendQuery(returnUrl, "error", "Review workflow үүсгэх гүйлгээ буруу байна."));
     }
 
-    var result = await adminService.EnsureSuspiciousReviewAsync(adminUserId, transactionId, cancellationToken);
-    if (!result.Success)
+    var draft = await adminService.GetSuspiciousTransactionDetailAsync(transactionId, cancellationToken);
+    if (draft is null)
     {
-        return Results.Redirect(AppendQuery(returnUrl, "error", result.ErrorMessage ?? "Review workflow үүсгэх үед алдаа гарлаа."));
+        return Results.Redirect(AppendQuery(returnUrl, "error", "Review workflow нээх гүйлгээ олдсонгүй."));
     }
 
     return Results.Redirect($"/admin/suspicious-transactions?detail={transactionId}");
@@ -668,15 +842,21 @@ app.MapPost("/transactions/create/submit", async (HttpContext context, ITransact
         : "/transactions/create";
     var createTransactionSeparator = createTransactionPath.Contains('?', StringComparison.Ordinal) ? "&" : "?";
 
-    if (!long.TryParse(fromAccountIdValue, out var fromAccountId) || !TryReadDecimal(amountValue, out var amount))
+    if (!long.TryParse(fromAccountIdValue, out var fromAccountId) || !TryReadTransactionAmount(amountValue, out var amount))
     {
-        return Results.Redirect($"{createTransactionPath}{createTransactionSeparator}error={Uri.EscapeDataString("Гүйлгээний хүсэлт буруу байна.")}");
+        return Results.Redirect($"{createTransactionPath}{createTransactionSeparator}error={Uri.EscapeDataString("Мөнгөн дүнд зөвхөн тоо, хамгийн ихдээ 2 бутархай орон оруулна уу.")}");
+    }
+
+    var toAccountNumber = form["ToAccountNumber"].ToString();
+    if (!IsValidAccountNumber(toAccountNumber))
+    {
+        return Results.Redirect($"{createTransactionPath}{createTransactionSeparator}error={Uri.EscapeDataString("Хүлээн авах дансны дугаар 10 оронтой тоо байх ёстой.")}");
     }
 
     var dto = new CreateTransactionDto
     {
         FromAccountId = fromAccountId,
-        ToAccountNumber = form["ToAccountNumber"].ToString(),
+        ToAccountNumber = toAccountNumber,
         Amount = amount,
         Description = form["Description"].ToString()
     };
@@ -709,6 +889,16 @@ app.MapPost("/auth/logout", async (HttpContext context, ISecurityEventService se
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect("/");
 }).RequireAuthorization();
+
+app.MapGet("/health", async (IOperationalHealthService healthService, CancellationToken cancellationToken) =>
+{
+    var report = await healthService.CheckAsync(cancellationToken);
+    var statusCode = report.Status == HealthStatusNames.Unhealthy
+        ? StatusCodes.Status503ServiceUnavailable
+        : StatusCodes.Status200OK;
+
+    return Results.Json(report, statusCode: statusCode);
+});
 
 app.MapGet("/auth/session-expired", async (HttpContext context, ISecurityEventService securityEventService, CancellationToken cancellationToken) =>
 {
@@ -797,6 +987,18 @@ static bool TryReadCurrentUserId(HttpContext context, out long userId)
     return long.TryParse(userIdValue, out userId);
 }
 
+static bool IsPasswordResetAllowedPath(PathString path)
+{
+    return path.StartsWithSegments("/profile")
+        || path.StartsWithSegments("/auth/logout")
+        || path.StartsWithSegments("/_framework")
+        || path.StartsWithSegments("/_content")
+        || path.StartsWithSegments("/css")
+        || path.StartsWithSegments("/js")
+        || path.StartsWithSegments("/images")
+        || path.StartsWithSegments("/lib");
+}
+
 static DateTimeOffset GetCurrentSessionExpiry(HttpContext context, string role)
 {
     var claimValue = context.User.FindFirstValue(AuthConstants.SessionExpiresUtcTicksClaim);
@@ -819,6 +1021,37 @@ static bool TryReadDecimal(string value, out decimal result)
 {
     return decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out result)
         || decimal.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out result);
+}
+
+static bool TryReadTransactionAmount(string value, out decimal result)
+{
+    result = 0m;
+    if (string.IsNullOrEmpty(value) || value != value.Trim())
+    {
+        return false;
+    }
+
+    var parts = value.Split('.');
+    if (parts.Length is < 1 or > 2 ||
+        parts[0].Length is < 1 or > 16 ||
+        parts[0].Any(character => character is < '0' or > '9'))
+    {
+        return false;
+    }
+
+    if (parts.Length == 2 &&
+        (parts[1].Length is < 1 or > 2 || parts[1].Any(character => character is < '0' or > '9')))
+    {
+        return false;
+    }
+
+    return decimal.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out result);
+}
+
+static bool IsValidAccountNumber(string value)
+{
+    return value.Length == 10 &&
+           value.All(character => character is >= '0' and <= '9');
 }
 
 static decimal? TryReadNullableDecimal(string value)

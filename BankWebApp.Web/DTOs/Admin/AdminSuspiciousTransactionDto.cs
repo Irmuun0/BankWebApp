@@ -2,6 +2,7 @@ namespace BankWebApp.Web.DTOs.Admin;
 
 public class AdminSuspiciousTransactionDto
 {
+    public bool IsDraft { get; set; }
     public long TransactionId { get; set; }
     public long FromAccountId { get; set; }
     public string FromAccountNumber { get; set; } = string.Empty;
@@ -19,6 +20,14 @@ public class AdminSuspiciousTransactionDto
     public decimal RiskScore { get; set; }
     public string SuspiciousReason { get; set; } = string.Empty;
     public string? AiExplanation { get; set; }
+    public DateTime ReviewCreatedAt { get; set; }
+    public DateTime? DetectionLoggedAt { get; set; }
+    public string? DetectionStatus { get; set; }
+    public string? DetectionSource { get; set; }
+    public decimal? DetectionRiskScore { get; set; }
+    public string? DetectionReason { get; set; }
+    public string? DetectionTriggeredRules { get; set; }
+    public IReadOnlyList<string> DetectionRules { get; set; } = Array.Empty<string>();
     public string ReviewStatus { get; set; } = string.Empty;
     public string ReviewStatusLabel { get; set; } = string.Empty;
     public string? ReviewNote { get; set; }

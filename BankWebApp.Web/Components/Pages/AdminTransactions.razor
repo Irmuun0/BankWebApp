@@ -1,138 +1,286 @@
 @page "/admin/transactions"
+@rendermode InteractiveServer
 @attribute [Authorize(Roles = "ADMIN")]
 @inject IAdminService AdminService
 
 <PageTitle>Админ - Бүх гүйлгээ</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>Бүх гүйлгээ</h1>
-</div>
-
-@if (isLoading)
-{
-    <p><em>Уншиж байна...</em></p>
-}
-else
-{
-    <form class="row g-2 mb-3" method="get" action="/admin/transactions">
-        <div class="col-12 col-md-5">
-            <input class="form-control" name="search" value="@Search" placeholder="Данс, төлөв, утга хайх" />
+<section class="admin-filter-card">
+    <form method="get" action="/admin/transactions">
+        <div class="row g-3">
+            <div class="col-12 col-lg-3">
+                <label class="form-label">Ерөнхий хайлт</label>
+                <input class="form-control" name="search" value="@Search" placeholder="Данс, төлөв, утга хайх" />
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Данс</label>
+                <input class="form-control" name="accountNumber" value="@AccountNumber" placeholder="1000..." />
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Хэрэглэгч</label>
+                <input class="form-control" name="username" value="@Username" placeholder="bat" />
+            </div>
+            <div class="col-6 col-lg-1">
+                <label class="form-label">Валют</label>
+                <select class="form-select" name="currency">
+                    <option value="">Бүгд</option>
+                    <option value="MNT" selected="@(Currency == "MNT")">MNT</option>
+                    <option value="USD" selected="@(Currency == "USD")">USD</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Төлөв</label>
+                <select class="form-select" name="status">
+                    <option value="">Бүгд</option>
+                    <option value="SUCCESS" selected="@(Status == "SUCCESS")">SUCCESS</option>
+                    <option value="FAILED" selected="@(Status == "FAILED")">FAILED</option>
+                    <option value="PENDING" selected="@(Status == "PENDING")">PENDING</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Сэжигтэй</label>
+                <select class="form-select" name="suspiciousStatus">
+                    <option value="">Бүгд</option>
+                    <option value="YES" selected="@(SuspiciousStatus == "YES")">Тийм</option>
+                    <option value="NO" selected="@(SuspiciousStatus == "NO")">Үгүй</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Доод дүн</label>
+                <input class="form-control" type="number" step="0.01" name="minAmount" value="@FormatDecimal(MinAmount)" />
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Дээд дүн</label>
+                <input class="form-control" type="number" step="0.01" name="maxAmount" value="@FormatDecimal(MaxAmount)" />
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Эхлэх огноо</label>
+                <input class="form-control" type="date" name="startDate" value="@FormatDateInput(StartDate)" />
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Дуусах огноо</label>
+                <input class="form-control" type="date" name="endDate" value="@FormatDateInput(EndDate)" />
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">FastAPI</label>
+                <select class="form-select" name="detectionStatus">
+                    <option value="">Бүгд</option>
+                    <option value="CHECKED" selected="@(DetectionStatus == "CHECKED")">Шалгасан</option>
+                    <option value="UNAVAILABLE" selected="@(DetectionStatus == "UNAVAILABLE")">Service алдаа</option>
+                    <option value="NONE" selected="@(DetectionStatus == "NONE")">Шалгаагүй</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label">Мөр</label>
+                <select class="form-select" name="pageSize">
+                    <option value="20" selected="@(PageSize == 20)">20</option>
+                    <option value="50" selected="@(PageSize == 50)">50</option>
+                    <option value="100" selected="@(PageSize == 100)">100</option>
+                </select>
+            </div>
         </div>
-        <div class="col-auto">
-            <button class="btn btn-outline-primary" type="submit">Хайх</button>
-        </div>
-        <div class="col-auto">
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <button class="btn btn-primary" type="submit">Шүүх</button>
             <a class="btn btn-outline-secondary" href="/admin/transactions">Цэвэрлэх</a>
         </div>
     </form>
+</section>
+
+@if (!string.IsNullOrWhiteSpace(filterValidationError))
+{
+    <div class="alert alert-danger" role="alert">@filterValidationError</div>
 }
 
-@if (!isLoading && transactions.Items.Count == 0)
+@if (isLoading)
 {
-    <p>Гүйлгээ олдсонгүй.</p>
+    <AppLoading Text="Гүйлгээний жагсаалт уншиж байна..." />
 }
-else if (!isLoading)
+else if (transactions.Items.Count == 0)
 {
-    <table class="table table-striped align-middle admin-transactions-table">
-        <thead>
-            <tr>
-                <th>Огноо</th>
-                <th>Илгээгч</th>
-                <th>Хүлээн авагч</th>
-                <th>Дүн</th>
-                <th>Орсон дүн</th>
-                <th>Төлөв</th>
-                <th>Сэжигтэй</th>
-                <th>FastAPI шалгалт</th>
-                <th>Оноо</th>
-                <th>Утга</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var group in transactions.Items.GroupBy(transaction => DateOnly.FromDateTime(transaction.CreatedAt)).OrderByDescending(group => group.Key))
-            {
-                <tr class="transaction-date-group">
-                    <td colspan="10">@group.Key.ToString("yyyy.MM.dd")</td>
+    <div class="empty-state">Шүүлтэд тохирох гүйлгээ олдсонгүй.</div>
+}
+else
+{
+    <div class="table-responsive admin-table-shell">
+        <table class="table table-striped align-middle admin-transactions-table">
+            <thead>
+                <tr>
+                    <th>Огноо</th>
+                    <th>Илгээгч</th>
+                    <th>Хүлээн авагч</th>
+                    <th>Дүн</th>
+                    <th>Орсон дүн</th>
+                    <th>Төлөв</th>
+                    <th>Сэжигтэй</th>
+                    <th>FastAPI шалгалт</th>
+                    <th>Оноо</th>
+                    <th>Утга</th>
+                    <th class="detection-toggle-column">
+                        <span class="visually-hidden">Detection тайлбар</span>
+                    </th>
                 </tr>
-
-                @foreach (var transaction in group)
+            </thead>
+            <tbody>
+                @foreach (var group in transactions.Items.GroupBy(transaction => DateOnly.FromDateTime(transaction.CreatedAt)).OrderByDescending(group => group.Key))
                 {
-                    <tr>
-                        <td class="numeric-cell transaction-time-cell">@transaction.CreatedAt.ToString("HH:mm")</td>
-                        <td><span class="numeric-cell">@transaction.FromAccountNumber</span></td>
-                        <td><span class="numeric-cell">@transaction.ToAccountNumber</span></td>
-                        <td class="numeric-cell money-stack">
-                            <span class="money-amount">@transaction.Amount.ToString("N2")</span>
-                            <span class="money-currency">@transaction.SourceCurrency</span>
-                        </td>
-                        <td class="numeric-cell money-stack">
-                            <span class="money-amount">@transaction.CreditedAmount.ToString("N2")</span>
-                            <span class="money-currency">@transaction.TargetCurrency</span>
-                        </td>
-                        <td class="latin-cell">@transaction.Status</td>
-                        <td>
-                            @if (transaction.IsSuspicious)
-                            {
-                                <a class="badge text-bg-danger text-decoration-none" href="/admin/suspicious-transactions/@transaction.Id">Тийм</a>
-                            }
-                            else
-                            {
-                                <span class="badge text-bg-light border">Үгүй</span>
-                            }
-                        </td>
-                        <td>
-                            <span class="badge @DetectionBadgeClass(transaction.DetectionStatus)">@DisplayDetectionStatus(transaction.DetectionStatus)</span>
-                            @if (transaction.DetectionLoggedAt is not null)
-                            {
-                                <div class="small text-muted numeric-cell">@transaction.DetectionLoggedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
-                            }
-                        </td>
-                        <td>
-                            @if (transaction.DetectionRiskScore is null)
-                            {
-                                <span>-</span>
-                            }
-                            else
-                            {
-                                <span class="numeric-cell">@transaction.DetectionRiskScore.Value.ToString("N2")</span>
-                            }
-                        </td>
-                        <td>@transaction.Description</td>
+                    <tr class="transaction-date-group">
+                        <td colspan="11">@group.Key.ToString("yyyy.MM.dd")</td>
                     </tr>
-                    @if (!string.IsNullOrWhiteSpace(transaction.DetectionReason))
+
+                    @foreach (var transaction in group)
                     {
                         <tr>
-                            <td colspan="10" class="small text-muted">
-                                <span class="fw-semibold">Detection тайлбар:</span> @transaction.DetectionReason
-                                @if (!string.IsNullOrWhiteSpace(transaction.DetectionTriggeredRules))
+                            <td class="numeric-cell transaction-time-cell">@transaction.CreatedAt.ToString("HH:mm")</td>
+                            <td><span class="numeric-cell">@transaction.FromAccountNumber</span></td>
+                            <td><span class="numeric-cell">@transaction.ToAccountNumber</span></td>
+                            <td class="numeric-cell money-stack">
+                                <span class="money-amount">@transaction.Amount.ToString("N2")</span>
+                                <span class="money-currency">@transaction.SourceCurrency</span>
+                            </td>
+                            <td class="numeric-cell money-stack">
+                                <span class="money-amount">@transaction.CreditedAmount.ToString("N2")</span>
+                                <span class="money-currency">@transaction.TargetCurrency</span>
+                            </td>
+                            <td class="latin-cell">@transaction.Status</td>
+                            <td>
+                                @if (transaction.IsSuspicious)
                                 {
-                                    <span class="ms-2"><span class="fw-semibold">Rules:</span> @transaction.DetectionTriggeredRules</span>
+                                    <a class="badge text-bg-danger text-decoration-none" href="/admin/suspicious-transactions/@transaction.Id">Тийм</a>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-light border">Үгүй</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @DetectionBadgeClass(transaction.DetectionStatus)">@DisplayDetectionStatus(transaction.DetectionStatus)</span>
+                                @if (transaction.DetectionLoggedAt is not null)
+                                {
+                                    <div class="small text-muted numeric-cell">@transaction.DetectionLoggedAt.Value.ToString("yyyy-MM-dd HH:mm")</div>
+                                }
+                            </td>
+                            <td>
+                                @(transaction.DetectionRiskScore is null ? "-" : transaction.DetectionRiskScore.Value.ToString("N2"))
+                            </td>
+                            <td>@transaction.Description</td>
+                            <td class="detection-toggle-cell">
+                                @if (!string.IsNullOrWhiteSpace(transaction.DetectionReason))
+                                {
+                                    var isExpanded = expandedDetectionIds.Contains(transaction.Id);
+                                    <button class="detection-toggle @(isExpanded ? "is-expanded" : null)"
+                                            type="button"
+                                            title="Detection тайлбар @(isExpanded ? "хаах" : "харах")"
+                                            aria-label="Гүйлгээ @transaction.Id-ын detection тайлбар @(isExpanded ? "хаах" : "харах")"
+                                            aria-expanded="@isExpanded"
+                                            @onclick="() => ToggleDetectionDetails(transaction.Id)">
+                                        <span class="detection-chevron" aria-hidden="true"></span>
+                                    </button>
                                 }
                             </td>
                         </tr>
+                        @if (!string.IsNullOrWhiteSpace(transaction.DetectionReason) &&
+                             expandedDetectionIds.Contains(transaction.Id))
+                        {
+                            <tr class="detection-detail-row">
+                                <td colspan="11">
+                                    <div class="detection-detail-content">
+                                        <span class="detection-detail-label">Detection тайлбар</span>
+                                        <span class="detection-detail-text">@transaction.DetectionReason</span>
+                                    @if (!string.IsNullOrWhiteSpace(transaction.DetectionTriggeredRules))
+                                    {
+                                            <span class="detection-rules">
+                                                <span class="detection-detail-label">Rules</span>
+                                                <span class="detection-detail-text">@transaction.DetectionTriggeredRules</span>
+                                            </span>
+                                    }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
                     }
                 }
-            }
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </div>
 
-    <AdminPager BasePath="/admin/transactions" Page="@transactions.Page" TotalPages="@transactions.TotalPages" Search="@Search" />
+    <AdminPager BasePath="/admin/transactions" Page="@transactions.Page" TotalPages="@transactions.TotalPages" Query="@BuildPagerQuery()" />
 }
 
 @code {
     private AdminPagedResultDto<AdminTransactionDto> transactions = new();
     private bool isLoading = true;
+    private string? filterValidationError;
+    private readonly HashSet<long> expandedDetectionIds = [];
 
-    [SupplyParameterFromQuery]
-    public string? Search { get; set; }
+    [SupplyParameterFromQuery] public string? Search { get; set; }
+    [SupplyParameterFromQuery] public string? AccountNumber { get; set; }
+    [SupplyParameterFromQuery] public string? Username { get; set; }
+    [SupplyParameterFromQuery] public string? Currency { get; set; }
+    [SupplyParameterFromQuery] public string? Status { get; set; }
+    [SupplyParameterFromQuery] public string? SuspiciousStatus { get; set; }
+    [SupplyParameterFromQuery] public string? DetectionStatus { get; set; }
+    [SupplyParameterFromQuery] public decimal? MinAmount { get; set; }
+    [SupplyParameterFromQuery] public decimal? MaxAmount { get; set; }
+    [SupplyParameterFromQuery] public DateOnly? StartDate { get; set; }
+    [SupplyParameterFromQuery] public DateOnly? EndDate { get; set; }
+    [SupplyParameterFromQuery] public int Page { get; set; } = 1;
+    [SupplyParameterFromQuery] public int PageSize { get; set; } = 20;
 
-    [SupplyParameterFromQuery]
-    public int Page { get; set; } = 1;
-
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        transactions = await AdminService.GetTransactionsAsync(Search, Page);
+        isLoading = true;
+        filterValidationError = null;
+        Page = Math.Max(Page, 1);
+        PageSize = NormalizePageSize(PageSize);
+
+        if (MinAmount is not null && MaxAmount is not null && MinAmount > MaxAmount)
+        {
+            filterValidationError = "Доод дүн нь дээд дүнгээс их байж болохгүй.";
+            transactions = new AdminPagedResultDto<AdminTransactionDto>
+            {
+                Page = Page,
+                PageSize = PageSize
+            };
+            isLoading = false;
+            return;
+        }
+
+        var filter = new AdminTransactionFilterDto
+        {
+            Search = Search,
+            AccountNumber = AccountNumber,
+            Username = Username,
+            Currency = Currency,
+            Status = Status,
+            SuspiciousStatus = SuspiciousStatus,
+            DetectionStatus = DetectionStatus,
+            MinAmount = MinAmount,
+            MaxAmount = MaxAmount,
+            StartDate = StartDate,
+            EndDate = EndDate
+        };
+
+        transactions = await AdminService.GetTransactionsAsync(filter, Page, PageSize);
         isLoading = false;
+    }
+
+    private IReadOnlyDictionary<string, string?> BuildPagerQuery()
+    {
+        return new Dictionary<string, string?>
+        {
+            ["search"] = Search,
+            ["accountNumber"] = AccountNumber,
+            ["username"] = Username,
+            ["currency"] = Currency,
+            ["status"] = Status,
+            ["suspiciousStatus"] = SuspiciousStatus,
+            ["detectionStatus"] = DetectionStatus,
+            ["minAmount"] = FormatDecimal(MinAmount),
+            ["maxAmount"] = FormatDecimal(MaxAmount),
+            ["startDate"] = FormatDateInput(StartDate),
+            ["endDate"] = FormatDateInput(EndDate),
+            ["pageSize"] = PageSize.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
     }
 
     private static string DisplayDetectionStatus(string? status)
@@ -156,4 +304,16 @@ else if (!isLoading)
             _ => "text-bg-light border"
         };
     }
+
+    private void ToggleDetectionDetails(long transactionId)
+    {
+        if (!expandedDetectionIds.Add(transactionId))
+        {
+            expandedDetectionIds.Remove(transactionId);
+        }
+    }
+
+    private static string? FormatDecimal(decimal? value) => value?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+    private static string? FormatDateInput(DateOnly? value) => value?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+    private static int NormalizePageSize(int value) => value is 50 or 100 ? value : 20;
 }

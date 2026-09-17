@@ -4,6 +4,7 @@
 @inject ICurrentUserService CurrentUser
 @inject IAccountService AccountService
 @inject ITransactionService TransactionService
+@inject NavigationManager Navigation
 
 <PageTitle>Хэрэглэгчийн самбар</PageTitle>
 
@@ -165,7 +166,9 @@ else
     }
 }
 
-<TransactionDetailModal Receipt="@selectedReceipt" CloseHref="@BuildDashboardCloseHref()" />
+<TransactionDetailModal Receipt="@selectedReceipt"
+                        CloseHref="@BuildDashboardCloseHref()"
+                        OnClose="@CloseTransactionDetailAsync" />
 
 @code {
     [SupplyParameterFromQuery(Name = "accountId")]
@@ -212,6 +215,7 @@ else
                 today);
         }
 
+        selectedReceipt = null;
         if (DetailTransactionId is not null)
         {
             selectedReceipt = await TransactionService.GetMyTransactionReceiptAsync(userId.Value, DetailTransactionId.Value);
@@ -265,6 +269,14 @@ else
     private string BuildDashboardCloseHref()
     {
         return selectedAccount is null ? "/dashboard" : $"/dashboard?accountId={selectedAccount.Id}";
+    }
+
+    private Task CloseTransactionDetailAsync()
+    {
+        selectedReceipt = null;
+        DetailTransactionId = null;
+        Navigation.NavigateTo(BuildDashboardCloseHref(), replace: true);
+        return Task.CompletedTask;
     }
 
     private IReadOnlyList<ChartDataPoint> BalanceByCurrencyChart => allAccounts

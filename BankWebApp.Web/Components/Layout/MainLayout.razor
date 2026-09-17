@@ -30,6 +30,7 @@
                                 <div class="app-nav-section">Банкны удирдлага</div>
                                 <NavLink class="app-nav-link" href="/admin/dashboard" Match="NavLinkMatch.All"><span class="app-nav-icon">H</span><span>Админ самбар</span></NavLink>
                                 <NavLink class="app-nav-link" href="/admin/users" Match="NavLinkMatch.All"><span class="app-nav-icon">U</span><span>Хэрэглэгчид</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/registration-requests" Match="NavLinkMatch.All"><span class="app-nav-icon">Req</span><span>Бүртгэлийн хүсэлт</span></NavLink>
                                 <NavLink class="app-nav-link" href="/admin/accounts" Match="NavLinkMatch.All"><span class="app-nav-icon">A</span><span>Данснууд</span></NavLink>
                                 <NavLink class="app-nav-link" href="/admin/transactions" Match="NavLinkMatch.All"><span class="app-nav-icon">Tx</span><span>Бүх гүйлгээ</span></NavLink>
 
@@ -43,6 +44,7 @@
                                 <NavLink class="app-nav-link" href="/admin/exchange-rates" Match="NavLinkMatch.All"><span class="app-nav-icon">$</span><span>Ханш тохируулах</span></NavLink>
                                 <NavLink class="app-nav-link" href="/admin/fx-income" Match="NavLinkMatch.All"><span class="app-nav-icon">FX</span><span>FX орлогын тайлан</span></NavLink>
                                 <NavLink class="app-nav-link" href="/admin/audit-logs" Match="NavLinkMatch.All"><span class="app-nav-icon">Log</span><span>Audit log</span></NavLink>
+                                <NavLink class="app-nav-link" href="/admin/health" Match="NavLinkMatch.All"><span class="app-nav-icon">OK</span><span>Health check</span></NavLink>
                             </nav>
                         }
                         else
@@ -56,7 +58,6 @@
                                 <div class="app-nav-section">Гүйлгээ</div>
                                 <NavLink class="app-nav-link app-nav-link-primary" href="/transactions/create" Match="NavLinkMatch.All"><span class="app-nav-icon">+</span><span>Гүйлгээ хийх</span></NavLink>
                                 <NavLink class="app-nav-link" href="/transactions" Match="NavLinkMatch.All"><span class="app-nav-icon">Tx</span><span>Гүйлгээний түүх</span></NavLink>
-                                <NavLink class="app-nav-link" href="/accounts/open" Match="NavLinkMatch.All"><span class="app-nav-icon">+</span><span>Данс нээх</span></NavLink>
                             </nav>
                         }
                     </aside>
@@ -65,14 +66,14 @@
                         <label class="app-nav-mobile-button" for="app-nav-toggle" aria-label="Цэс нээх"><span></span><span></span><span></span></label>
                         @if (backHref is not null)
                         {
-                            <a class="app-header-back" href="@backHref" aria-label="Буцах">
+                            <a class="app-header-back" href="@backHref" data-app-back="true" aria-label="Буцах">
                                 <svg class="app-header-back-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                                     <path d="M10.5 3.5 6 8l4.5 4.5M6.5 8h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                                 </svg>
                             </a>
                         }
                         <div class="top-page-heading">
-                            <div class="top-page-title">@pageTitle</div>
+                            <div class="top-page-title" title="@pageTitle">@pageTitle</div>
                             <div class="top-page-subtitle">@pageSubtitle</div>
                         </div>
                         <SessionExpiryMonitor />
@@ -145,7 +146,9 @@
         "accounts" or "transactions" or "accounts/open" or "transactions/create" => "/dashboard",
         "accounts/settings" => "/accounts",
         _ when CurrentRoute.StartsWith("accounts/") => "/accounts",
+        _ when CurrentRoute.StartsWith("admin/users/") => "/admin/users",
         "admin/users"
+            or "admin/registration-requests"
             or "admin/accounts"
             or "admin/transactions"
             or "admin/ai-detection"
@@ -154,8 +157,9 @@
             or "admin/fraud-rules"
             or "admin/exchange-rates"
             or "admin/fx-income"
-            or "admin/audit-logs" => "/admin/dashboard",
-        _ when CurrentRoute.StartsWith("admin/suspicious-transactions/") => "/admin/suspicious-transactions",
+            or "admin/audit-logs"
+            or "admin/health" => "/admin/dashboard",
+        _ when CurrentRoute.StartsWith("admin/suspicious-transactions/") => GetQueryParameter("returnUrl") ?? "/admin/suspicious-transactions",
         _ => isAdmin ? "/admin/dashboard" : "/dashboard"
     };
 
@@ -167,11 +171,14 @@
         "admin/suspicious-detection-report" => "Detection тайлан",
         "admin/fraud-rules" => "Fraud rule тохиргоо",
         "admin/users" => "Хэрэглэгчид",
+        "admin/registration-requests" => "Бүртгэлийн хүсэлт",
+        _ when CurrentRoute.StartsWith("admin/users/") => "Хэрэглэгчийн мэдээлэл",
         "admin/accounts" => "Данснууд",
         "admin/transactions" => "Бүх гүйлгээ",
         "admin/exchange-rates" => "Ханш тохируулах",
         "admin/fx-income" => "FX орлогын тайлан",
         "admin/audit-logs" => "Audit log",
+        "admin/health" => "Operational health",
         "profile" => "Хувийн мэдээлэл",
         "dashboard" => "Хэрэглэгчийн самбар",
         "accounts" => "Миний дансууд",
@@ -193,8 +200,10 @@
         "admin/exchange-rates" => "Банкны авах, зарах ханшийн удирдлага",
         "admin/fx-income" => "Ханшийн зөрүүнээс үүссэн орлогын тайлан",
         "admin/audit-logs" => "Security event, admin action, fraud action бүртгэл",
+        "admin/health" => "Web app, DB, FastAPI, Gemini, MongolBank readiness",
         "profile" => "Нэвтрэх мэдээлэл, холбоо барих утас, нууц үгийн тохиргоо",
         "admin/users" => "Хэрэглэгчийн бүртгэл, төлөв, хяналт",
+        "admin/registration-requests" => "Шинэ хэрэглэгчийн хүсэлт, temporary password, approval workflow",
         "admin/accounts" => "Дансны төлөв, лимит, эзэмшигчийн мэдээлэл",
         "admin/transactions" => "Системийн бүх гүйлгээний жагсаалт",
         "dashboard" => "Данс, үлдэгдэл, сүүлийн гүйлгээний товч харагдац",
@@ -205,8 +214,30 @@
         "transactions/create" => "Өөрийн болон бусдын данс руу шилжүүлэг хийх",
         _ when CurrentRoute.StartsWith("accounts/") => "Дансны үндсэн мэдээлэл болон төлөв",
         _ when CurrentRoute.StartsWith("admin/suspicious-transactions/") => "Review action, notification, audit workflow",
-        _ => isAdmin ? "Admin workflow-ийн төв" : "Өдөр тутмын банкны үйлдлүүд"
+        _ => isAdmin ? "Админы удирдлага" : "Өдөр тутмын банкны үйлдлүүд"
     };
+
+    private string? GetQueryParameter(string key)
+    {
+        var queryStart = Navigation.Uri.IndexOf('?', StringComparison.Ordinal);
+        if (queryStart < 0 || queryStart == Navigation.Uri.Length - 1)
+        {
+            return null;
+        }
+
+        var query = Navigation.Uri[(queryStart + 1)..].Split('#')[0];
+        foreach (var part in query.Split('&', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var pair = part.Split('=', 2);
+            if (pair.Length == 2 && string.Equals(Uri.UnescapeDataString(pair[0]), key, StringComparison.OrdinalIgnoreCase))
+            {
+                var value = Uri.UnescapeDataString(pair[1]);
+                return string.IsNullOrWhiteSpace(value) ? null : value;
+            }
+        }
+
+        return null;
+    }
 
     private static string GetDisplayName(System.Security.Claims.ClaimsPrincipal user)
     {
@@ -217,6 +248,15 @@
     private static string GetMaskedDisplayName(System.Security.Claims.ClaimsPrincipal user)
     {
         var name = GetDisplayName(user);
+        const string suffix = "-ийн ";
+        var suffixIndex = name.IndexOf(suffix, StringComparison.Ordinal);
+        if (suffixIndex > 0)
+        {
+            var lastName = name[..suffixIndex];
+            var firstName = name[(suffixIndex + suffix.Length)..];
+            return $"{MaskSurname(lastName)}-ийн {firstName}";
+        }
+
         var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length < 2)
         {

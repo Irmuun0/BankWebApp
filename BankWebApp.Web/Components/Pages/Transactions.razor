@@ -4,14 +4,11 @@
 @inject ICurrentUserService CurrentUser
 @inject IAccountService AccountService
 @inject ITransactionService TransactionService
+@inject NavigationManager Navigation
 
 <PageTitle>Гүйлгээний түүх</PageTitle>
 
 <section class="transactions-page">
-    <div class="page-action-bar">
-        <a class="btn btn-primary" href="/transactions/create">Гүйлгээ хийх</a>
-    </div>
-
     @if (isLoading)
     {
         <div class="transactions-state">Уншиж байна...</div>
@@ -143,7 +140,9 @@
     }
 </section>
 
-<TransactionDetailModal Receipt="@selectedReceipt" CloseHref="@BuildCloseHref()" />
+<TransactionDetailModal Receipt="@selectedReceipt"
+                        CloseHref="@BuildCloseHref()"
+                        OnClose="@CloseTransactionDetailAsync" />
 
 @code {
     [SupplyParameterFromQuery(Name = "accountId")]
@@ -197,6 +196,7 @@
             filterStartDate,
             filterEndDate);
 
+        selectedReceipt = null;
         if (DetailTransactionId is not null)
         {
             selectedReceipt = await TransactionService.GetMyTransactionReceiptAsync(userId.Value, DetailTransactionId.Value);
@@ -254,6 +254,14 @@
     private string BuildCloseHref()
     {
         return $"/transactions?accountId={selectedAccountId}&startDate={filterStartDate:yyyy-MM-dd}&endDate={filterEndDate:yyyy-MM-dd}";
+    }
+
+    private Task CloseTransactionDetailAsync()
+    {
+        selectedReceipt = null;
+        DetailTransactionId = null;
+        Navigation.NavigateTo(BuildCloseHref(), replace: true);
+        return Task.CompletedTask;
     }
 
     private static string DisplayAccountType(string accountType)

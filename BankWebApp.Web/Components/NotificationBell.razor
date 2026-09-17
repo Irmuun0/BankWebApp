@@ -1,6 +1,8 @@
 @rendermode InteractiveServer
+@implements IDisposable
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject INotificationService NotificationService
+@inject IUiOverlayCoordinator OverlayCoordinator
 
 @if (userId is not null)
 {
@@ -100,6 +102,7 @@
 }
 
 @code {
+    private const string OverlayKey = "notifications";
     private long? userId;
     private List<BankWebApp.Web.DTOs.Notifications.NotificationDto> notifications = [];
     private BankWebApp.Web.DTOs.Notifications.NotificationDto? selectedNotification;
@@ -110,6 +113,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        OverlayCoordinator.OverlayActivated += HandleOverlayActivated;
+
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
@@ -147,12 +152,14 @@
         isOpen = !isOpen;
         if (isOpen)
         {
+            OverlayCoordinator.Activate(OverlayKey);
             await LoadNotificationsAsync();
         }
     }
 
     private async Task SelectNotificationAsync(BankWebApp.Web.DTOs.Notifications.NotificationDto notification)
     {
+        OverlayCoordinator.Activate(OverlayKey);
         selectedNotification = notification;
         isOpen = false;
 
@@ -166,6 +173,24 @@
     private void CloseDetail()
     {
         selectedNotification = null;
+    }
+
+    private void HandleOverlayActivated(string overlayKey)
+    {
+        if (string.Equals(overlayKey, OverlayKey, StringComparison.Ordinal)
+            || (!isOpen && selectedNotification is null))
+        {
+            return;
+        }
+
+        isOpen = false;
+        selectedNotification = null;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        OverlayCoordinator.OverlayActivated -= HandleOverlayActivated;
     }
 
     private static string DisplayNotificationType(string type)

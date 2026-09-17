@@ -1,4 +1,6 @@
 .floating-rate-widget {
+    --floating-action-size: 3rem;
+    --floating-action-gap: 0.65rem;
     position: fixed;
     right: 1.25rem;
     bottom: 1.25rem;
@@ -13,14 +15,20 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 3rem;
-    height: 3rem;
+    width: var(--floating-action-size);
+    height: var(--floating-action-size);
     border: 0;
     border-radius: 50%;
     color: #fff;
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.28);
+    cursor: pointer;
     pointer-events: auto;
     transition: transform 180ms ease, opacity 180ms ease, box-shadow 180ms ease;
+}
+
+.floating-rate-action:focus-visible {
+    outline: 2px solid #c59448;
+    outline-offset: 3px;
 }
 
 .floating-rate-action:hover,
@@ -46,18 +54,11 @@
 }
 
 .floating-money-icon {
-    width: 100%;
-    height: 100%;
+    width: 114%;
+    height: 114%;
     display: block;
     object-fit: contain;
-    filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.24));
-    transition: transform 180ms ease, filter 180ms ease;
-}
-
-.floating-rate-money:hover .floating-money-icon,
-.floating-rate-money:focus .floating-money-icon {
-    transform: translateY(-1px);
-    filter: drop-shadow(0 14px 24px rgba(15, 23, 42, 0.28));
+    filter: none;
 }
 
 .floating-rate-chat {
@@ -67,29 +68,23 @@
     padding: 0;
     border-radius: 0;
     box-shadow: none;
-    transform: translateY(-3.8rem) scale(1);
+    bottom: calc(var(--floating-action-size) + var(--floating-action-gap));
+    transform: none;
 }
 
 .floating-rate-chat:hover,
 .floating-rate-chat:focus {
     box-shadow: none;
-    transform: translateY(-3.9rem) scale(1);
+    transform: translateY(-1px);
 }
 
 .floating-chat-icon {
-    width: 180%;
-    height: 180%;
+    width: 120%;
+    height: 120%;
     display: block;
     object-fit: contain;
     border-radius: 0;
-    filter: drop-shadow(0 10px 18px rgba(15, 23, 42, 0.24));
-    transition: transform 180ms ease, filter 180ms ease;
-}
-
-.floating-rate-chat:hover .floating-chat-icon,
-.floating-rate-chat:focus .floating-chat-icon {
-    transform: translateY(-1px);
-    filter: drop-shadow(0 14px 24px rgba(15, 23, 42, 0.28));
+    filter: none;
 }
 
 .floating-rate-panel {
@@ -524,22 +519,10 @@
 
 @media (max-width: 640px) {
     .floating-rate-widget {
+        --floating-action-size: 2.8rem;
+        --floating-action-gap: 0.55rem;
         right: 0.85rem;
         bottom: 0.85rem;
-    }
-
-    .floating-rate-action {
-        width: 2.8rem;
-        height: 2.8rem;
-    }
-
-    .floating-rate-chat {
-        transform: translateY(-3.45rem) scale(1);
-    }
-
-    .floating-rate-chat:hover,
-    .floating-rate-chat:focus {
-        transform: translateY(-3.55rem) scale(1);
     }
 
     .floating-rate-panel {

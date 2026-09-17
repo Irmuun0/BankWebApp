@@ -20,16 +20,22 @@ public class MongolBankExchangeRateService : IExchangeRateService
     private const decimal DefaultSellMarginPercent = 0.001m;
     private const decimal TroyOunceGrams = 31.1034768m;
     private static readonly SemaphoreSlim CacheLock = new(1, 1);
+    private static readonly SemaphoreSlim SettingsUpsertLock = new(1, 1);
     private static IReadOnlyList<MongolBankExchangeRateDto>? CachedRates;
     private static DateTimeOffset? CachedAt;
 
     private readonly HttpClient _httpClient;
     private readonly IDbContextFactory<BankDbContext> _dbContextFactory;
+    private readonly ILogger<MongolBankExchangeRateService> _logger;
 
-    public MongolBankExchangeRateService(HttpClient httpClient, IDbContextFactory<BankDbContext> dbContextFactory)
+    public MongolBankExchangeRateService(
+        HttpClient httpClient,
+        IDbContextFactory<BankDbContext> dbContextFactory,
+        ILogger<MongolBankExchangeRateService> logger)
     {
         _httpClient = httpClient;
         _dbContextFactory = dbContextFactory;
+        _logger = logger;
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
     }
 
@@ -428,6 +434,7 @@ public class MongolBankExchangeRateService : IExchangeRateService
         MongolBankExchangeRateDto usdRate,
         CancellationToken cancellationToken)
     {
+        await SettingsUpsertLock.WaitAsync(cancellationToken);
         try
         {
             await using var dbContext = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -435,6 +442,7 @@ public class MongolBankExchangeRateService : IExchangeRateService
                 .Include(rate => rate.CurrencyRateOverrideSchedules)
                 .FirstOrDefaultAsync(rate => rate.CurrencyCode == "USD" && rate.BaseCurrency == "MNT", cancellationToken);
 
+            var isNew = setting is null;
             if (setting is null)
             {
                 setting = new CurrencyRateSetting
@@ -451,32 +459,60 @@ public class MongolBankExchangeRateService : IExchangeRateService
             var now = MongoliaClock.Now;
             var buyMargin = setting.AlgoBuyMarginPercent <= 0 ? DefaultBuyMarginPercent : setting.AlgoBuyMarginPercent;
             var sellMargin = setting.AlgoSellMarginPercent <= 0 ? DefaultSellMarginPercent : setting.AlgoSellMarginPercent;
-            setting.BaseRate = usdRate.MntRate;
-            setting.AlgoBuyMarginPercent = buyMargin;
-            setting.AlgoSellMarginPercent = sellMargin;
-            setting.AlgoBuyRate = CalculateBuyRate(usdRate.MntRate, buyMargin);
-            setting.AlgoSellRate = CalculateSellRate(usdRate.MntRate, sellMargin);
-            setting.RateDate = usdRate.RateDate ?? MongoliaClock.Today;
-            setting.Source = SourceName;
-            setting.FetchedAt = now;
-            setting.UpdatedAt = now;
+            var buyRate = CalculateBuyRate(usdRate.MntRate, buyMargin);
+            var sellRate = CalculateSellRate(usdRate.MntRate, sellMargin);
+            var rateDate = usdRate.RateDate ?? MongoliaClock.Today;
+            var hasRateChanges =
+                isNew ||
+                setting.BaseRate != usdRate.MntRate ||
+                setting.AlgoBuyMarginPercent != buyMargin ||
+                setting.AlgoSellMarginPercent != sellMargin ||
+                setting.AlgoBuyRate != buyRate ||
+                setting.AlgoSellRate != sellRate ||
+                setting.RateDate != rateDate ||
+                !string.Equals(setting.Source, SourceName, StringComparison.Ordinal);
 
+            if (hasRateChanges)
+            {
+                setting.BaseRate = usdRate.MntRate;
+                setting.AlgoBuyMarginPercent = buyMargin;
+                setting.AlgoSellMarginPercent = sellMargin;
+                setting.AlgoBuyRate = buyRate;
+                setting.AlgoSellRate = sellRate;
+                setting.RateDate = rateDate;
+                setting.Source = SourceName;
+                setting.FetchedAt = now;
+                setting.UpdatedAt = now;
+            }
+
+            var manualOverrideExpired = false;
             if (setting.IsManualOverride &&
                 setting.ManualExpiresAt is not null &&
                 setting.ManualExpiresAt <= now)
             {
+                manualOverrideExpired = true;
                 setting.IsManualOverride = false;
                 setting.ManualBuyRate = null;
                 setting.ManualSellRate = null;
                 setting.ManualExpiresAt = null;
+                setting.UpdatedAt = now;
             }
 
-            await dbContext.SaveChangesAsync(cancellationToken);
+            if (hasRateChanges || manualOverrideExpired)
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
             return setting;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            _logger.LogWarning(exception, "Currency rate setting sync failed for {CurrencyCode}.", usdRate.CurrencyCode);
             return null;
+        }
+        finally
+        {
+            SettingsUpsertLock.Release();
         }
     }
 

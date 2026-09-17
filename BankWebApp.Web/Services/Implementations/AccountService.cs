@@ -36,9 +36,15 @@ public class AccountService : IAccountService
                 Balance = account.Balance,
                 DailyTransactionLimitMnt = account.DailyTransactionLimitMnt,
                 IsActive = account.IsActive,
+                IsAdminLocked = account.IsAdminLocked,
+                AdminLockedAt = account.AdminLockedAt,
                 IsPrimary = account.IsPrimary,
                 CreatedAt = account.CreatedAt,
-                OwnerName = ((account.User.FirstName ?? "") + " " + (account.User.LastName ?? "")).Trim()
+                OwnerName = account.User.LastName == null || account.User.LastName == ""
+                    ? (account.User.FirstName ?? "")
+                    : account.User.FirstName == null || account.User.FirstName == ""
+                        ? account.User.LastName + "-ийн"
+                        : account.User.LastName + "-ийн " + account.User.FirstName
             })
             .ToListAsync(cancellationToken);
     }
@@ -57,9 +63,15 @@ public class AccountService : IAccountService
                 Balance = account.Balance,
                 DailyTransactionLimitMnt = account.DailyTransactionLimitMnt,
                 IsActive = account.IsActive,
+                IsAdminLocked = account.IsAdminLocked,
+                AdminLockedAt = account.AdminLockedAt,
                 IsPrimary = account.IsPrimary,
                 CreatedAt = account.CreatedAt,
-                OwnerName = ((account.User.FirstName ?? "") + " " + (account.User.LastName ?? "")).Trim(),
+                OwnerName = account.User.LastName == null || account.User.LastName == ""
+                    ? (account.User.FirstName ?? "")
+                    : account.User.FirstName == null || account.User.FirstName == ""
+                        ? account.User.LastName + "-ийн"
+                        : account.User.LastName + "-ийн " + account.User.FirstName,
                 LastTransactionAt = _dbContext.Transactions
                     .Where(transaction => transaction.FromAccountId == account.Id || transaction.ToAccountId == account.Id)
                     .Max(transaction => (DateTime?)transaction.CreatedAt)
@@ -166,10 +178,28 @@ public class AccountService : IAccountService
         }
 
         var now = MongoliaClock.Now;
-        account.IsActive = isActive;
+        if (isActive)
+        {
+            var updatedRows = await _dbContext.Accounts
+                .Where(item => item.Id == accountId && item.UserId == userId && !item.IsAdminLocked)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(item => item.IsActive, true)
+                        .SetProperty(item => item.UpdatedAt, now),
+                    cancellationToken);
+
+            if (updatedRows == 0)
+            {
+                return (false, "Энэ дансыг банкны админ хаасан тул та өөрөө идэвхжүүлэх боломжгүй. Банкны ажилтантай холбогдоно уу.");
+            }
+
+            return (true, "Данс идэвхтэй боллоо.");
+        }
+
+        account.IsActive = false;
         account.UpdatedAt = now;
 
-        if (!isActive && account.IsPrimary)
+        if (account.IsPrimary)
         {
             account.IsPrimary = false;
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -188,7 +218,7 @@ public class AccountService : IAccountService
         }
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return (true, isActive ? "Данс идэвхтэй боллоо." : "Данс идэвхгүй боллоо.");
+        return (true, "Данс идэвхгүй боллоо.");
     }
 
     public async Task<(bool Success, string? ErrorMessage)> SetPrimaryAccountAsync(
@@ -242,6 +272,8 @@ public class AccountService : IAccountService
             Balance = account.Balance,
             DailyTransactionLimitMnt = account.DailyTransactionLimitMnt,
             IsActive = account.IsActive,
+            IsAdminLocked = account.IsAdminLocked,
+            AdminLockedAt = account.AdminLockedAt,
             IsPrimary = account.IsPrimary,
             CreatedAt = account.CreatedAt
         };

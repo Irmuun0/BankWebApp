@@ -51,10 +51,10 @@ else if (account is not null)
             <dd class="col-sm-8">@DisplayAccountType(account.AccountType)</dd>
 
             <dt class="col-sm-4">Нийт үлдэгдэл</dt>
-            <dd class="col-sm-8">@account.Balance.ToString("N2")@account.Currency</dd>
+            <dd class="col-sm-8">@($"{account.Balance:N2} {account.Currency}")</dd>
 
             <dt class="col-sm-4">Төлөв</dt>
-            <dd class="col-sm-8">@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</dd>
+            <dd class="col-sm-8">@(account.IsAdminLocked ? "Админаар хаасан" : account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</dd>
 
             <dt class="col-sm-4">Нээсэн огноо</dt>
             <dd class="col-sm-8">@account.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>

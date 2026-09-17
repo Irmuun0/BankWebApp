@@ -117,6 +117,14 @@ else if (!isLoading)
                         <dd class="col-sm-7">@selectedDetail.CreditedAmount.ToString("N2") @selectedDetail.TargetCurrency</dd>
                         <dt class="col-sm-5">Risk score</dt>
                         <dd class="col-sm-7">@selectedDetail.RiskScore.ToString("N2")</dd>
+                        <dt class="col-sm-5">Review үүссэн</dt>
+                        <dd class="col-sm-7">@(selectedDetail.IsDraft ? "Хадгалагдаагүй" : selectedDetail.ReviewCreatedAt.ToString("yyyy-MM-dd HH:mm"))</dd>
+                        <dt class="col-sm-5">Rule шалгасан</dt>
+                        <dd class="col-sm-7">@(selectedDetail.DetectionLoggedAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</dd>
+                        <dt class="col-sm-5">Rule score</dt>
+                        <dd class="col-sm-7">@(selectedDetail.DetectionRiskScore?.ToString("N2") ?? "-")</dd>
+                        <dt class="col-sm-5">Rule source</dt>
+                        <dd class="col-sm-7">@(selectedDetail.DetectionSource ?? "-") / @(selectedDetail.DetectionStatus ?? "-")</dd>
                         <dt class="col-sm-5">Review</dt>
                         <dd class="col-sm-7">@selectedDetail.ReviewStatusLabel</dd>
                         <dt class="col-sm-5">Review хийсэн</dt>
@@ -137,7 +145,10 @@ else if (!isLoading)
 
             <form class="border rounded p-3 mt-3" method="post" action="/admin/suspicious-transactions/review">
                 <input type="hidden" name="TransactionId" value="@selectedDetail.TransactionId" />
-                <input type="hidden" name="ExpectedUpdatedAtTicks" value="@selectedDetail.UpdatedAt.Ticks" />
+                @if (!selectedDetail.IsDraft)
+                {
+                    <input type="hidden" name="ExpectedUpdatedAtTicks" value="@selectedDetail.UpdatedAt.Ticks" />
+                }
                 <input type="hidden" name="ReturnUrl" value="@CurrentPageWithDetail" />
 
                 <div class="mb-3">
@@ -203,7 +214,9 @@ else if (!isLoading)
                     <textarea class="form-control" id="userNotificationMessage" name="UserNotificationMessage" rows="3"
                               placeholder="Хоосон үлдээвэл review төлөвт тохирсон стандарт мэдэгдэл илгээгдэнэ."></textarea>
                 </div>
-                <button class="btn btn-primary" type="submit">Хадгалах</button>
+                <button class="btn btn-primary" type="submit">
+                    @(selectedDetail.IsDraft ? "Арга хэмжээг баталгаажуулж хадгалах" : "Хадгалах")
+                </button>
             </form>
         </div>
     </div>
@@ -267,7 +280,13 @@ else if (!isLoading)
 
     protected override async Task OnInitializedAsync()
     {
-        suspiciousTransactions = await AdminService.GetSuspiciousTransactionsAsync(Search, ReviewStatus, Page);
+        suspiciousTransactions = await AdminService.GetSuspiciousTransactionsAsync(
+            new AdminSuspiciousTransactionFilterDto
+            {
+                Search = Search,
+                ReviewStatus = ReviewStatus
+            },
+            Page);
         if (DetailTransactionId is not null)
         {
             selectedDetail = await AdminService.GetSuspiciousTransactionDetailAsync(DetailTransactionId.Value);

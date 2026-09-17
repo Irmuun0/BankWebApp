@@ -47,6 +47,8 @@ public partial class User
 
     public DateTime? PasswordChangedAt { get; set; }
 
+    public bool PasswordResetRequired { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

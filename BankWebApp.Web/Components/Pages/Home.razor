@@ -17,10 +17,20 @@
         </nav>
 
         <div class="phoebe-header-actions">
-            <button class="phoebe-admin-link" type="button" data-login-open="admin">Admin</button>
-            <button class="phoebe-login-button" type="button" data-login-open="user">Нэвтрэх</button>
+            <button class="phoebe-secondary-login-button" type="button" data-register-open>Бүртгүүлэх</button>
+            <button class="phoebe-login-button" type="button" data-login-open>Нэвтрэх</button>
         </div>
     </header>
+
+    @if (!string.IsNullOrWhiteSpace(RegistrationSuccess))
+    {
+        <div class="phoebe-public-toast phoebe-public-toast-success" role="status">@RegistrationSuccess</div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(RegistrationError))
+    {
+        <div class="phoebe-public-toast phoebe-public-toast-error" role="alert">@RegistrationError</div>
+    }
 
     <section class="phoebe-hero">
         <div class="phoebe-hero-copy">
@@ -31,7 +41,8 @@
             </p>
 
             <div class="phoebe-hero-actions">
-                <button class="phoebe-primary-cta" type="button" data-login-open="user">Интернет банк руу нэвтрэх</button>
+                <button class="phoebe-primary-cta" type="button" data-login-open>Интернет банк руу нэвтрэх</button>
+                <button class="phoebe-secondary-cta" type="button" data-register-open>Шинэ хэрэглэгч болох</button>
                 <a class="phoebe-secondary-cta" href="#security">Аюулгүй байдлыг харах</a>
             </div>
 
@@ -150,8 +161,75 @@
             <h2>Phoebe bank-д тавтай морил</h2>
             <p>Системд нэвтэрч өөрийн данс, гүйлгээ, мэдэгдэл болон ханшийн мэдээллээ удирдаарай.</p>
         </div>
-        <button class="phoebe-primary-cta" type="button" data-login-open="user">Нэвтрэх</button>
+        <button class="phoebe-primary-cta" type="button" data-login-open>Нэвтрэх</button>
     </section>
+</div>
+
+<div class="phoebe-login-modal" id="phoebe-registration-modal" aria-hidden="true">
+    <div class="phoebe-login-backdrop" data-register-close></div>
+    <div class="phoebe-login-dialog phoebe-registration-dialog" role="dialog" aria-modal="true" aria-labelledby="phoebe-registration-title">
+        <button class="phoebe-login-close" type="button" data-register-close aria-label="Хаах">×</button>
+        <form class="phoebe-login-form is-active" method="post" action="/registration/request">
+            <h4 id="phoebe-registration-title">Шинэ хэрэглэгчийн бүртгэлийн хүсэлт</h4>
+            <p class="phoebe-registration-help">Админ таны мэдээллийг хянасны дараа түр нууц үгтэй нэвтрэх мэдээлэл үүсгэнэ. Анхны нэвтрэлтээр нууц үгээ заавал шинэчилнэ.</p>
+
+            <div class="phoebe-registration-grid">
+                <label>
+                    <span>Нэр</span>
+                    <input name="FirstName" required maxlength="50" autocomplete="given-name" pattern="[А-Яа-яЁёӨөҮү\s]+" data-mn-name />
+                    <small class="field-hint">Зөвхөн монгол кирилл үсэг.</small>
+                </label>
+                <label>
+                    <span>Овог</span>
+                    <input name="LastName" required maxlength="50" autocomplete="family-name" pattern="[А-Яа-яЁёӨөҮү\s]+" data-mn-name />
+                    <small class="field-hint">Зөвхөн монгол кирилл үсэг.</small>
+                </label>
+                <label>
+                    <span>Нэвтрэх нэр</span>
+                    <input name="RequestedUsername" required minlength="3" maxlength="50" autocomplete="username" pattern="[A-Za-z]+" data-english-username />
+                    <small class="field-hint">Зөвхөн англи үсэг.</small>
+                </label>
+                <label>
+                    <span>Email</span>
+                    <input name="Email" required type="email" maxlength="100" autocomplete="email" pattern="[A-Za-z0-9._%+\-]+@@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}" data-ascii-email />
+                </label>
+                <label>
+                    <span>Утас</span>
+                    <input name="PhoneNumber" required maxlength="8" inputmode="numeric" autocomplete="tel" pattern="\d{8}" data-phone8 />
+                </label>
+                <label>
+                    <span>Регистр / ID</span>
+                    <input type="hidden" name="NationalId" data-national-id-hidden required />
+                    <div class="national-id-control">
+                        <select data-national-letter required aria-label="Регистрийн эхний үсэг"></select>
+                        <select data-national-letter required aria-label="Регистрийн хоёр дахь үсэг"></select>
+                        <input data-national-digits required maxlength="8" inputmode="numeric" pattern="\d{8}" placeholder="12345678" />
+                    </div>
+                    <small class="field-hint">2 монгол үсэг сонгоод 8 оронтой тоо оруулна.</small>
+                </label>
+                <label>
+                    <span>Яаралтай холбоо барих утас</span>
+                    <input name="EmergencyPhoneNumber" maxlength="8" inputmode="numeric" autocomplete="tel" pattern="\d{8}" data-phone8 />
+                </label>
+                <label>
+                    <span>Хариу авах хэлбэр</span>
+                    <select name="PreferredContactMethod">
+                        <option value="EMAIL">Email</option>
+                        <option value="PHONE">Утас</option>
+                    </select>
+                </label>
+            </div>
+
+            <label>
+                <span>Нэмэлт тайлбар</span>
+                <textarea name="RequestNote" rows="3" maxlength="500" placeholder="Хэрэв шаардлагатай бол нэмэлт мэдээлэл бичнэ үү."></textarea>
+            </label>
+
+            <div class="phoebe-registration-submit-row">
+                <button class="phoebe-login-submit" type="submit">Бүртгүүлэх хүсэлт илгээх</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <div class="phoebe-login-modal" id="phoebe-login-modal" aria-hidden="true">
@@ -165,16 +243,11 @@
             <div class="phoebe-login-error" role="alert">@Error</div>
         }
 
-        <div class="phoebe-login-tabs" role="tablist" aria-label="Нэвтрэх төрөл">
-            <button class="is-active" type="button" data-login-tab="user" role="tab">Хэрэглэгч</button>
-            <button type="button" data-login-tab="admin" role="tab">Админ</button>
-        </div>
-
         <form class="phoebe-login-form is-active" method="post" action="/auth/login" data-login-panel="user">
-            <h4 id="phoebe-login-title">Хэрэглэгч нэвтрэх</h4>
-            <input type="hidden" name="ReturnUrl" value="@ReturnUrlOrDashboard" />
-            <input type="hidden" name="RequiredRole" value="USER" />
-            <input type="hidden" name="LoginPath" value="/?login=user" />
+            <h4 id="phoebe-login-title">Нэвтрэх</h4>
+            <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
+            <input type="hidden" name="RequiredRole" value="" />
+            <input type="hidden" name="LoginPath" value="/" />
 
             <label for="homeUsernameOrEmail">Хэрэглэгчийн нэр эсвэл имэйл</label>
             <input id="homeUsernameOrEmail" name="UsernameOrEmail" autocomplete="username" />
@@ -192,29 +265,6 @@
 
             <button class="phoebe-login-submit" type="submit">Нэвтрэх</button>
         </form>
-
-        <form class="phoebe-login-form" method="post" action="/auth/login" data-login-panel="admin">
-            <h2>Админ нэвтрэх</h2>
-            <input type="hidden" name="ReturnUrl" value="@ReturnUrlOrAdminDashboard" />
-            <input type="hidden" name="RequiredRole" value="ADMIN" />
-            <input type="hidden" name="LoginPath" value="/?login=admin" />
-
-            <label for="homeAdminUsernameOrEmail">Admin нэр эсвэл имэйл</label>
-            <input id="homeAdminUsernameOrEmail" name="UsernameOrEmail" autocomplete="username" />
-
-            <label for="homeAdminPassword">Нууц үг</label>
-            <div class="phoebe-password-field">
-                <input id="homeAdminPassword" name="Password" type="password" autocomplete="current-password" />
-                <button type="button" data-password-toggle="homeAdminPassword" aria-label="Нууц үг харах">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                        <circle cx="12" cy="12" r="3" />
-                    </svg>
-                </button>
-            </div>
-
-            <button class="phoebe-login-submit" type="submit">Admin нэвтрэх</button>
-        </form>
     </div>
 </div>
 
@@ -223,26 +273,23 @@
         const modal = document.getElementById('phoebe-login-modal');
         if (!modal) return;
 
-        const tabs = [...modal.querySelectorAll('[data-login-tab]')];
         const panels = [...modal.querySelectorAll('[data-login-panel]')];
-        const focusFirstField = (mode) => {
-            const panel = modal.querySelector(`[data-login-panel="${mode}"]`);
+        const focusFirstField = () => {
+            const panel = modal.querySelector('[data-login-panel="user"]');
             const input = panel?.querySelector('input[name="UsernameOrEmail"]');
             setTimeout(() => input?.focus(), 60);
         };
 
-        const setMode = (mode) => {
-            const nextMode = mode === 'admin' ? 'admin' : 'user';
-            tabs.forEach(tab => tab.classList.toggle('is-active', tab.dataset.loginTab === nextMode));
-            panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.loginPanel === nextMode));
-            focusFirstField(nextMode);
+        const setMode = () => {
+            panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.loginPanel === 'user'));
+            focusFirstField();
         };
 
-        const openModal = (mode) => {
+        const openModal = () => {
             modal.classList.add('is-open');
             modal.setAttribute('aria-hidden', 'false');
             document.body.classList.add('phoebe-modal-open');
-            setMode(mode);
+            setMode();
         };
 
         const closeModal = () => {
@@ -252,15 +299,11 @@
         };
 
         document.querySelectorAll('[data-login-open]').forEach(button => {
-            button.addEventListener('click', () => openModal(button.dataset.loginOpen));
+            button.addEventListener('click', openModal);
         });
 
         modal.querySelectorAll('[data-login-close]').forEach(button => {
             button.addEventListener('click', closeModal);
-        });
-
-        tabs.forEach(tab => {
-            tab.addEventListener('click', () => setMode(tab.dataset.loginTab));
         });
 
         modal.querySelectorAll('[data-password-toggle]').forEach(button => {
@@ -281,7 +324,104 @@
         const loginMode = query.get('login');
         const hasError = query.has('error');
         if (loginMode || hasError) {
-            openModal(loginMode === 'admin' ? 'admin' : 'user');
+            openModal();
+        }
+    })();
+</script>
+
+<script>
+    (() => {
+        const modal = document.getElementById('phoebe-registration-modal');
+        if (!modal) return;
+
+        const openModal = () => {
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('phoebe-modal-open');
+            setTimeout(() => modal.querySelector('input[name="FirstName"]')?.focus(), 60);
+        };
+
+        const closeModal = () => {
+            modal.classList.remove('is-open');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('phoebe-modal-open');
+        };
+
+        document.querySelectorAll('[data-register-open]').forEach(button => {
+            button.addEventListener('click', openModal);
+        });
+
+        modal.querySelectorAll('[data-register-close]').forEach(button => {
+            button.addEventListener('click', closeModal);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && modal.classList.contains('is-open')) {
+                closeModal();
+            }
+        });
+
+        const mongolianLetters = 'АБВГДЕЁЖЗИЙКЛМНОӨПРСТУҮФХЦЧШЩЪЫЬЭЮЯ'.split('');
+        modal.querySelectorAll('[data-national-letter]').forEach(select => {
+            select.append(new Option('Үсэг', ''));
+            mongolianLetters.forEach(letter => select.append(new Option(letter, letter)));
+        });
+
+        const onlyDigits = (input) => {
+            input.value = input.value.replace(/\D/g, '').slice(0, input.maxLength > 0 ? input.maxLength : 8);
+        };
+
+        modal.querySelectorAll('[data-phone8], [data-national-digits]').forEach(input => {
+            input.addEventListener('input', () => onlyDigits(input));
+        });
+
+        const clearNationalIdError = () => {
+            modal.querySelector('[data-national-digits]')?.setCustomValidity('');
+        };
+
+        modal.querySelectorAll('[data-national-letter], [data-national-digits]').forEach(input => {
+            input.addEventListener('input', clearNationalIdError);
+            input.addEventListener('change', clearNationalIdError);
+        });
+
+        modal.querySelectorAll('[data-english-username]').forEach(input => {
+            input.addEventListener('input', () => {
+                input.value = input.value.replace(/[^A-Za-z]/g, '');
+            });
+        });
+
+        modal.querySelectorAll('[data-ascii-email]').forEach(input => {
+            input.addEventListener('input', () => {
+                input.value = input.value.replace(/[^A-Za-z0-9._%+\-@@]/g, '');
+            });
+        });
+
+        modal.querySelectorAll('[data-mn-name]').forEach(input => {
+            input.addEventListener('input', () => {
+                input.value = input.value.replace(/[^А-Яа-яЁёӨөҮү\s]/g, '');
+            });
+        });
+        const form = modal.querySelector('form');
+        form?.addEventListener('submit', (event) => {
+            const letters = [...modal.querySelectorAll('[data-national-letter]')].map(select => select.value);
+            const digits = modal.querySelector('[data-national-digits]')?.value ?? '';
+            const hidden = modal.querySelector('[data-national-id-hidden]');
+            if (hidden) {
+                hidden.value = `${letters.join('')}${digits}`;
+            }
+
+            if (letters.some(value => !value) || digits.length !== 8) {
+                event.preventDefault();
+                modal.querySelector('[data-national-digits]')?.setCustomValidity('Регистрийн 2 үсэг болон 8 оронтой тоог бүрэн оруулна уу.');
+                modal.querySelector('[data-national-digits]')?.reportValidity();
+            } else {
+                modal.querySelector('[data-national-digits]')?.setCustomValidity('');
+            }
+        });
+
+        const query = new URLSearchParams(window.location.search);
+        if (query.has('registrationError')) {
+            openModal();
         }
     })();
 </script>
@@ -295,6 +435,12 @@
 
     [SupplyParameterFromQuery(Name = "login")]
     public string? LoginMode { get; set; }
+
+    [SupplyParameterFromQuery(Name = "registrationSuccess")]
+    public string? RegistrationSuccess { get; set; }
+
+    [SupplyParameterFromQuery(Name = "registrationError")]
+    public string? RegistrationError { get; set; }
 
     private string ReturnUrlOrDashboard => string.IsNullOrWhiteSpace(ReturnUrl) ? "/dashboard" : ReturnUrl;
 

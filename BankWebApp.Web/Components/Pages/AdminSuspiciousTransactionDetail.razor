@@ -47,6 +47,14 @@ else
                     <dd class="col-sm-7">@detail.CreditedAmount.ToString("N2") @detail.TargetCurrency</dd>
                     <dt class="col-sm-5">Risk score</dt>
                     <dd class="col-sm-7">@detail.RiskScore.ToString("N2")</dd>
+                    <dt class="col-sm-5">Review үүссэн</dt>
+                    <dd class="col-sm-7">@(detail.IsDraft ? "Хадгалагдаагүй" : detail.ReviewCreatedAt.ToString("yyyy-MM-dd HH:mm"))</dd>
+                    <dt class="col-sm-5">Rule шалгасан</dt>
+                    <dd class="col-sm-7">@(detail.DetectionLoggedAt?.ToString("yyyy-MM-dd HH:mm") ?? "-")</dd>
+                    <dt class="col-sm-5">Rule score</dt>
+                    <dd class="col-sm-7">@(detail.DetectionRiskScore?.ToString("N2") ?? "-")</dd>
+                    <dt class="col-sm-5">Rule source</dt>
+                    <dd class="col-sm-7">@(detail.DetectionSource ?? "-") / @(detail.DetectionStatus ?? "-")</dd>
                     <dt class="col-sm-5">Review төлөв</dt>
                     <dd class="col-sm-7">@detail.ReviewStatusLabel</dd>
                     <dt class="col-sm-5">Review хийсэн</dt>
@@ -64,6 +72,26 @@ else
                     <div class="fw-semibold">Сэжигтэй шалтгаан</div>
                     <p>@detail.SuspiciousReason</p>
                 </div>
+                <div class="mb-3">
+                    <div class="fw-semibold">Илэрсэн rule</div>
+                    @if (detail.DetectionRules.Count == 0)
+                    {
+                        <p class="text-muted mb-0">Rule мэдээлэл бүртгэгдээгүй.</p>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var rule in detail.DetectionRules)
+                            {
+                                <span class="badge rounded-pill text-bg-light border">@rule</span>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="mb-3">
+                    <div class="fw-semibold">Rule engine тайлбар</div>
+                    <p>@(detail.DetectionReason ?? "-")</p>
+                </div>
                 <div>
                     <div class="fw-semibold">AI тайлбар</div>
                     <p>@detail.AiExplanation</p>
@@ -74,8 +102,11 @@ else
 
     <form class="border rounded p-3 mt-4" method="post" action="/admin/suspicious-transactions/review">
         <input type="hidden" name="TransactionId" value="@detail.TransactionId" />
-        <input type="hidden" name="ExpectedUpdatedAtTicks" value="@detail.UpdatedAt.Ticks" />
-        <input type="hidden" name="ReturnUrl" value="@($"/admin/suspicious-transactions/{detail.TransactionId}")" />
+        @if (!detail.IsDraft)
+        {
+            <input type="hidden" name="ExpectedUpdatedAtTicks" value="@detail.UpdatedAt.Ticks" />
+        }
+        <input type="hidden" name="ReturnUrl" value="@BuildCleanReturnUrl(detail.TransactionId)" />
 
         <h2 class="h5">Review шинэчлэх</h2>
 
@@ -103,7 +134,9 @@ else
             <textarea class="form-control" id="userNotificationMessage" name="UserNotificationMessage" rows="3"
                       placeholder="Хоосон үлдээвэл review төлөвт тохирсон стандарт мэдэгдэл илгээгдэнэ."></textarea>
         </div>
-        <button class="btn btn-primary" type="submit">Хадгалах</button>
+        <button class="btn btn-primary" type="submit">
+            @(detail.IsDraft ? "Арга хэмжээг баталгаажуулж хадгалах" : "Хадгалах")
+        </button>
     </form>
 }
 
@@ -117,6 +150,9 @@ else
     [SupplyParameterFromQuery]
     public string? Error { get; set; }
 
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
     private AdminSuspiciousTransactionDto? detail;
     private bool isLoading = true;
 
@@ -124,5 +160,15 @@ else
     {
         detail = await AdminService.GetSuspiciousTransactionDetailAsync(TransactionId);
         isLoading = false;
+    }
+
+    private string BuildCleanReturnUrl(long transactionId)
+    {
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            return $"/admin/suspicious-transactions/{transactionId}";
+        }
+
+        return $"/admin/suspicious-transactions/{transactionId}?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
     }
 }

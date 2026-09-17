@@ -8,6 +8,7 @@ from app.gemini_client import (
     answer_bank_info_question,
     answer_follow_up,
     answer_user_finance_question,
+    check_gemini_readiness,
     explain_transaction,
 )
 from app.models import (
@@ -36,6 +37,13 @@ def health() -> HealthResponse:
     """Сервис ажиллаж байгаа эсэхийг шалгана."""
 
     return HealthResponse(status="ok", service=settings.service_name)
+
+
+@app.get("/health/gemini")
+def gemini_health() -> dict[str, object | None]:
+    """Gemini model metadata probe. generateContent дуудахгүй, token зарцуулахгүй."""
+
+    return check_gemini_readiness()
 
 
 @app.post("/detect-suspicious", response_model=SuspiciousDetectionResponse)

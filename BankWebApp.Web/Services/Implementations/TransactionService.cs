@@ -107,7 +107,8 @@ public class TransactionService : ITransactionService
         CancellationToken cancellationToken = default)
     {
         var receiverAccountNumber = dto.ToAccountNumber.Trim();
-        var amount = decimal.Round(dto.Amount, 2, MidpointRounding.AwayFromZero);
+        const decimal maximumTransactionAmount = 9999999999999999.99m;
+        var amount = dto.Amount;
         var description = dto.Description?.Trim();
 
         if (dto.FromAccountId <= 0)
@@ -120,9 +121,25 @@ public class TransactionService : ITransactionService
             return Failed("Хүлээн авах дансны дугаараа оруулна уу.");
         }
 
+        if (receiverAccountNumber.Length != 10 ||
+            !receiverAccountNumber.All(character => character is >= '0' and <= '9'))
+        {
+            return Failed("Хүлээн авах дансны дугаар 10 оронтой тоо байх ёстой.");
+        }
+
         if (amount <= 0)
         {
             return Failed("Гүйлгээний дүн 0-ээс их байх ёстой.");
+        }
+
+        if (amount != decimal.Round(amount, 2, MidpointRounding.ToZero))
+        {
+            return Failed("Гүйлгээний дүн хамгийн ихдээ 2 бутархай оронтой байх ёстой.");
+        }
+
+        if (amount > maximumTransactionAmount)
+        {
+            return Failed("Гүйлгээний дүн зөвшөөрөгдөх хэмжээнээс их байна.");
         }
 
         if (string.IsNullOrWhiteSpace(description))
@@ -603,7 +620,9 @@ public class TransactionService : ITransactionService
         CancellationToken cancellationToken = default)
     {
         var normalizedAccountNumber = accountNumber.Trim();
-        if (string.IsNullOrWhiteSpace(normalizedAccountNumber))
+        if (string.IsNullOrWhiteSpace(normalizedAccountNumber) ||
+            normalizedAccountNumber.Length != 10 ||
+            !normalizedAccountNumber.All(character => character is >= '0' and <= '9'))
         {
             return null;
         }
@@ -847,8 +866,7 @@ public class TransactionService : ITransactionService
     private static string BuildOwnerDisplayName(string? firstName, string? lastName, bool maskLastName)
     {
         var displayLastName = maskLastName ? MaskLastName(lastName) : lastName;
-        var fullName = $"{firstName} {displayLastName}".Trim();
-        return string.IsNullOrWhiteSpace(fullName) ? "-" : fullName;
+        return UserDisplayNameFormatter.Format(firstName, displayLastName, "-");
     }
 
     private static string? MaskLastName(string? lastName)

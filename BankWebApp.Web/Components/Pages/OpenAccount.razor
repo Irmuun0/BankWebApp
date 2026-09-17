@@ -23,17 +23,17 @@
     </div>
 }
 
-<form method="post" action="/accounts/open/submit" class="border rounded p-4" style="max-width: 420px;">
+<form method="post" action="/accounts/open/submit" class="border rounded p-4" style="max-width: 420px;" data-dirty-check="true">
     <div class="mb-3">
         <label class="form-label" for="currency">Валют</label>
-        <select class="form-select" id="currency" name="Currency">
+        <select class="form-select" id="currency" name="Currency" required>
             <option value="">Сонгоно уу</option>
             <option value="MNT">MNT</option>
             <option value="USD">USD</option>
         </select>
     </div>
 
-    <button class="btn btn-primary" type="submit">Данс нээх</button>
+    <button class="btn btn-primary" type="submit" disabled>Данс нээх</button>
     <a class="btn btn-link" href="/accounts">Миний дансууд</a>
 </form>
 

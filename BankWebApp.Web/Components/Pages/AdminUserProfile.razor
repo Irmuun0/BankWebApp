@@ -1,0 +1,285 @@
+@page "/admin/users/{UserId:long}/profile"
+@attribute [Authorize(Roles = "ADMIN")]
+@inject IAdminService AdminService
+@inject ICurrentUserService CurrentUser
+@inject NavigationManager Navigation
+
+<PageTitle>Админ - Хэрэглэгчийн мэдээлэл</PageTitle>
+
+@if (!string.IsNullOrWhiteSpace(Success))
+{
+    <div class="profile-toast profile-toast-success" role="status">@Success</div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Error))
+{
+    <div class="profile-toast profile-toast-error" role="alert">@Error</div>
+}
+
+@if (isLoading)
+{
+    <div class="admin-user-profile-card admin-user-profile-empty">Уншиж байна...</div>
+}
+else if (profile is null)
+{
+    <div class="admin-user-profile-card admin-user-profile-empty">
+        <h2>Хэрэглэгч олдсонгүй</h2>
+        <a class="btn btn-outline-primary" href="/admin/users">Хэрэглэгчид рүү буцах</a>
+    </div>
+}
+else
+{
+    <section class="admin-user-profile-hero">
+        <a class="admin-user-profile-back" href="/admin/users" aria-label="Хэрэглэгчид рүү буцах">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M10.5 3.5 6 8l4.5 4.5M6.5 8h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </a>
+        <div class="admin-user-profile-avatar" aria-hidden="true">@GetInitial(profile)</div>
+        <div class="admin-user-profile-heading">
+            <div class="admin-user-profile-kicker">Хэрэглэгчийн тохиргоо</div>
+            <div class="admin-user-profile-title">@DisplayName(profile)</div>
+            <p>@profile.Username · @RoleLabel(profile.Role) · @StatusLabel(profile.IsActive)</p>
+        </div>
+    </section>
+
+    <section class="admin-user-profile-stats">
+        <div>
+            <span>Сүүлд нэвтэрсэн</span>
+            <strong>@FormatDate(profile.LastLoginAt)</strong>
+        </div>
+        <div>
+            <span>Failed login</span>
+            <strong>@profile.FailedLoginCount</strong>
+        </div>
+        <div>
+            <span>Түгжээ</span>
+            <strong>@(profile.LockedUntil.HasValue ? profile.LockedUntil.Value.ToString("yyyy-MM-dd HH:mm") : "Үгүй")</strong>
+        </div>
+        <div>
+            <span>Нийт данс</span>
+            <strong>@profile.Accounts.Count</strong>
+        </div>
+    </section>
+
+    <div class="admin-user-profile-grid">
+        <form id="admin-user-profile-form" class="admin-user-profile-card admin-user-profile-form" method="post" action="/admin/users/profile/update" data-dirty-check="true">
+            <input type="hidden" name="UserId" value="@profile.Id" />
+            <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
+
+            <div class="admin-user-profile-card-header">
+                <div>
+                    <h2>Хувийн мэдээлэл</h2>
+                    <p>Нэвтрэх нэр болон холбоо барих мэдээллийг шинэчилнэ.</p>
+                </div>
+                <button id="admin-user-profile-save" class="btn btn-primary" type="submit" disabled>Хадгалах</button>
+            </div>
+
+            <div class="admin-user-profile-form-grid">
+                <label>
+                    <span>Овог</span>
+                    <input name="LastName" value="@profile.LastName" autocomplete="family-name" />
+                </label>
+                <label>
+                    <span>Нэр</span>
+                    <input name="FirstName" value="@profile.FirstName" autocomplete="given-name" />
+                </label>
+                <label>
+                    <span>Нэвтрэх нэр</span>
+                    <input name="Username" value="@profile.Username" autocomplete="username" required minlength="3" />
+                </label>
+                <label>
+                    <span>И-мэйл</span>
+                    <input name="Email" value="@profile.Email" type="email" autocomplete="email" required />
+                </label>
+                <label>
+                    <span>Гар утас</span>
+                    <input name="PhoneNumber" value="@profile.PhoneNumber" autocomplete="tel" required />
+                </label>
+                <label>
+                    <span>Яаралтай холбоо барих утас</span>
+                    <input name="EmergencyPhoneNumber" value="@profile.EmergencyPhoneNumber" autocomplete="tel" />
+                </label>
+            </div>
+        </form>
+
+        <aside class="admin-user-profile-card admin-user-profile-security">
+            <div class="admin-user-profile-card-header">
+                <div>
+                    <h2>Нэвтрэх мэдээлэл</h2>
+                    <p>Эрх, түгжээ болон password reset шаардлага.</p>
+                </div>
+            </div>
+
+            <form method="post" action="/admin/users/toggle-status" class="admin-user-profile-switch-row">
+                <input type="hidden" name="UserId" value="@profile.Id" />
+                <input type="hidden" name="IsActive" value="@(profile.IsActive ? "false" : "true")" />
+                <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
+                <div>
+                    <strong>Нэвтрэх эрхийг хаах, нээх</strong>
+                    <span>@StatusLabel(profile.IsActive)</span>
+                </div>
+                <button class="admin-user-profile-switch @(profile.IsActive ? "is-on" : "")"
+                        type="submit"
+                        disabled="@(CurrentUser.UserId == profile.Id && profile.IsActive)"
+                        aria-label="Нэвтрэх эрхийг хаах, нээх">
+                    <span></span>
+                </button>
+            </form>
+
+            <form method="post" action="/admin/users/profile/password-reset-required" class="admin-user-profile-reset-row">
+                <input type="hidden" name="UserId" value="@profile.Id" />
+                <input type="hidden" name="IsRequired" value="@(profile.PasswordResetRequired ? "false" : "true")" />
+                <input type="hidden" name="ReturnUrl" value="@CurrentPageUrl" />
+                <div>
+                    <strong>Нууц үг шинэчлэх шаардлага</strong>
+                    <span>@(profile.PasswordResetRequired ? "Шаардсан" : "Шаардаагүй")</span>
+                </div>
+                <button class="btn @(profile.PasswordResetRequired ? "btn-outline-secondary" : "btn-outline-primary")" type="submit">
+                    @(profile.PasswordResetRequired ? "Шаардлагыг буцаах" : "Шинэчлэхийг шаардах")
+                </button>
+            </form>
+
+            <dl class="admin-user-profile-dl">
+                <div><dt>Role</dt><dd>@RoleLabel(profile.Role)</dd></div>
+                <div><dt>Бүртгэсэн</dt><dd>@FormatDate(profile.CreatedAt)</dd></div>
+                <div><dt>Шинэчилсэн</dt><dd>@FormatDate(profile.UpdatedAt)</dd></div>
+                <div><dt>Password сольсон</dt><dd>@FormatDate(profile.PasswordChangedAt)</dd></div>
+            </dl>
+        </aside>
+    </div>
+
+    <section class="admin-user-profile-card">
+        <div class="admin-user-profile-card-header">
+            <div>
+                <h2>Дансны холбоос</h2>
+                <p>Тухайн хэрэглэгчийн эзэмшдэг дансууд.</p>
+            </div>
+            <a class="btn btn-outline-primary" href="/admin/accounts">Дансны жагсаалт</a>
+        </div>
+
+        @if (profile.Accounts.Count == 0)
+        {
+            <div class="admin-user-profile-empty">Данс байхгүй байна.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Данс</th>
+                            <th>Төрөл</th>
+                            <th>Валют</th>
+                            <th>Үлдэгдэл</th>
+                            <th>Төлөв</th>
+                            <th>Нээсэн</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var account in profile.Accounts)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@account.AccountNumber</strong>
+                                    @if (account.IsPrimary)
+                                    {
+                                        <span class="admin-user-profile-pill">Үндсэн</span>
+                                    }
+                                </td>
+                                <td>@DisplayAccountType(account.AccountType)</td>
+                                <td>@account.Currency</td>
+                                <td>@account.Balance.ToString("N2")</td>
+                                <td>@StatusLabel(account.IsActive)</td>
+                                <td>@account.OpenedAt.ToString("yyyy-MM-dd")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="admin-user-profile-card">
+        <div class="admin-user-profile-card-header">
+            <div>
+                <h2>Сүүлийн audit</h2>
+                <p>Энэ хэрэглэгч дээр хийсэн сүүлийн admin action-ууд.</p>
+            </div>
+            <a class="btn btn-outline-secondary" href="/admin/audit-logs?search=@Uri.EscapeDataString(profile.Username)">Бүх audit харах</a>
+        </div>
+
+        @if (profile.RecentAuditLogs.Count == 0)
+        {
+            <div class="admin-user-profile-empty">Audit бүртгэл олдсонгүй.</div>
+        }
+        else
+        {
+            <div class="admin-user-profile-audit-list">
+                @foreach (var log in profile.RecentAuditLogs)
+                {
+                    <article>
+                        <div>
+                            <strong>@(string.IsNullOrWhiteSpace(log.ActionLabel) ? log.Action : log.ActionLabel)</strong>
+                            <p>@(string.IsNullOrWhiteSpace(log.Detail) ? "-" : log.Detail)</p>
+                        </div>
+                        <span>@log.CreatedAt.ToString("yyyy-MM-dd HH:mm") · @(log.ActorUsername ?? "system")</span>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter]
+    public long UserId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "success")]
+    public string? Success { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+
+    private AdminUserProfileDto? profile;
+    private bool isLoading = true;
+
+    private string CurrentPageUrl => "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+
+    protected override async Task OnInitializedAsync()
+    {
+        profile = await AdminService.GetUserProfileAsync(UserId);
+        isLoading = false;
+    }
+
+    private static string DisplayName(AdminUserProfileDto item)
+    {
+        return UserDisplayNameFormatter.Format(item.FirstName, item.LastName, item.Username);
+    }
+
+    private static string GetInitial(AdminUserProfileDto item)
+    {
+        var displayName = DisplayName(item);
+        return string.IsNullOrWhiteSpace(displayName) ? "U" : displayName[..1].ToUpperInvariant();
+    }
+
+    private static string RoleLabel(string role)
+    {
+        return string.Equals(role, "ADMIN", StringComparison.OrdinalIgnoreCase) ? "Админ" : "Хэрэглэгч";
+    }
+
+    private static string StatusLabel(bool isActive)
+    {
+        return isActive ? "Идэвхтэй" : "Идэвхгүй";
+    }
+
+    private static string FormatDate(DateTime? value)
+    {
+        return value.HasValue ? value.Value.ToString("yyyy-MM-dd HH:mm") : "Бүртгэлгүй";
+    }
+
+    private static string DisplayAccountType(string accountType)
+    {
+        return string.Equals(accountType, "CHECKING", StringComparison.OrdinalIgnoreCase) ? "Харилцах" : accountType;
+    }
+}

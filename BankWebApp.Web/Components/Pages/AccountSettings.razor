@@ -150,15 +150,31 @@ else
 
         <div class="d-flex justify-content-between align-items-center mt-3">
             <span>Төлөв</span>
-            <form method="post" action="/accounts/toggle-status" class="d-flex align-items-center gap-2">
-                <input type="hidden" name="AccountId" value="@account.Id" />
-                <input type="hidden" name="IsActive" value="@(nextStatus ? "true" : "false")" />
-                <span class="@(account.IsActive ? "text-success" : "text-muted")">@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</span>
-                <button class="switch-button @(account.IsActive ? "is-on" : "is-off")" type="submit" title="Төлөв өөрчлөх">
-                    <span class="switch-knob"></span>
-                </button>
-            </form>
+            @if (account.IsAdminLocked)
+            {
+                <div class="d-flex align-items-center gap-2" title="Энэ дансыг зөвхөн банкны админ дахин нээх боломжтой.">
+                    <span class="text-danger">Админаар хаасан</span>
+                    <button class="switch-button is-off" type="button" disabled aria-label="Админаар хаасан данс">
+                        <span class="switch-knob"></span>
+                    </button>
+                </div>
+            }
+            else
+            {
+                <form method="post" action="/accounts/toggle-status" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="AccountId" value="@account.Id" />
+                    <input type="hidden" name="IsActive" value="@(nextStatus ? "true" : "false")" />
+                    <span class="@(account.IsActive ? "text-success" : "text-muted")">@(account.IsActive ? "Идэвхтэй" : "Идэвхгүй")</span>
+                    <button class="switch-button @(account.IsActive ? "is-on" : "is-off")" type="submit" title="Төлөв өөрчлөх">
+                        <span class="switch-knob"></span>
+                    </button>
+                </form>
+            }
         </div>
+        @if (account.IsAdminLocked)
+        {
+            <div class="small text-muted mt-2">Идэвхжүүлэхийн тулд банкны ажилтантай холбогдоно уу.</div>
+        }
     </div>;
 
     private static string DisplayAccountType(string accountType)

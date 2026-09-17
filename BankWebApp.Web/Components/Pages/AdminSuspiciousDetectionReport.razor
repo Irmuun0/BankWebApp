@@ -2,6 +2,7 @@
 @attribute [Authorize(Roles = "ADMIN")]
 @rendermode InteractiveServer
 @inject IAdminService AdminService
+@inject NavigationManager Navigation
 
 <PageTitle>Админ - Suspicious detection тайлан</PageTitle>
 
@@ -105,7 +106,7 @@ else if (!isLoading)
                     <th>Дүн</th>
                     <th>Score</th>
                     <th>Rule</th>
-                    <th>Шалтгаан</th>
+                    <th>Товч тайлбар</th>
                     <th>Review</th>
                     <th>Status</th>
                     <th></th>
@@ -138,32 +139,25 @@ else if (!isLoading)
                             }
                         </td>
                         <td>
-                            @if (item.TriggeredRules.Count == 0)
-                            {
-                                <span class="text-muted">-</span>
-                            }
-                            else
-                            {
-                                @foreach (var rule in item.TriggeredRules)
-                                {
-                                    <span class="badge text-bg-light border me-1 mb-1">@rule</span>
-                                }
-                            }
+                            <span class="badge text-bg-light border">@item.TriggeredRules.Count rule</span>
                         </td>
-                        <td style="max-width: 360px;">@item.Reason</td>
+                        <td class="detection-report-summary">@BuildShortText(item.Reason)</td>
                         <td>@item.ReviewStatusLabel</td>
                         <td>
                             <span class="badge @(item.IsSuspicious == true ? "text-bg-danger" : "text-bg-secondary")">@DisplayServiceStatus(item)</span>
                         </td>
                         <td class="text-end">
-                            @if (item.IsSuspicious == true)
-                            {
-                                <a class="btn btn-sm btn-outline-primary" href="/admin/suspicious-transactions/@item.TransactionId">Дэлгэрэнгүй</a>
-                            }
-                            else
-                            {
-                                <a class="btn btn-sm btn-outline-secondary" href="@($"/admin/transactions?search={item.TransactionId}")">Гүйлгээ харах</a>
-                            }
+                            <div class="d-inline-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" @onclick="() => OpenLogDetail(item)">Дэлгэрэнгүй</button>
+                                @if (item.IsSuspicious == true)
+                                {
+                                    <a class="btn btn-sm btn-outline-primary" href="@BuildSuspiciousDetailHref(item.TransactionId)">Review</a>
+                                }
+                                else
+                                {
+                                    <a class="btn btn-sm btn-outline-primary" href="@($"/admin/transactions?search={item.TransactionId}")">Гүйлгээ харах</a>
+                                }
+                            </div>
                         </td>
                     </tr>
                 }
@@ -181,8 +175,92 @@ else if (!isLoading)
     }
 }
 
+@if (selectedLog is not null)
+{
+    <div class="modal-backdrop fade show"></div>
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h2 class="modal-title h5 mb-0">Detection log #@selectedLog.Id</h2>
+                        <div class="text-muted small">Гүйлгээ #@selectedLog.TransactionId · @selectedLog.DetectionAt.ToString("yyyy-MM-dd HH:mm")</div>
+                    </div>
+                    <button class="btn-close" type="button" aria-label="Хаах" @onclick="CloseLogDetail"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 h-100">
+                                <div class="fw-semibold mb-2">Гүйлгээ</div>
+                                <dl class="row mb-0 small">
+                                    <dt class="col-5">Илгээгч</dt>
+                                    <dd class="col-7">@selectedLog.FromAccountNumber</dd>
+                                    <dt class="col-5">Хүлээн авагч</dt>
+                                    <dd class="col-7">@selectedLog.ToAccountNumber</dd>
+                                    <dt class="col-5">Илгээсэн</dt>
+                                    <dd class="col-7">@selectedLog.Amount.ToString("N2") @selectedLog.SourceCurrency</dd>
+                                    <dt class="col-5">Орсон</dt>
+                                    <dd class="col-7">@selectedLog.CreditedAmount.ToString("N2") @selectedLog.TargetCurrency</dd>
+                                </dl>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="border rounded p-3 h-100">
+                                <div class="fw-semibold mb-2">Шалгалт</div>
+                                <dl class="row mb-0 small">
+                                    <dt class="col-5">Service</dt>
+                                    <dd class="col-7">@selectedLog.ServiceStatus</dd>
+                                    <dt class="col-5">Risk score</dt>
+                                    <dd class="col-7">@(selectedLog.RiskScore?.ToString("N2") ?? "-")</dd>
+                                    <dt class="col-5">Review</dt>
+                                    <dd class="col-7">@selectedLog.ReviewStatusLabel</dd>
+                                    <dt class="col-5">Source</dt>
+                                    <dd class="col-7">@selectedLog.Source</dd>
+                                </dl>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="fw-semibold mb-2">Илэрсэн rule</div>
+                        @if (selectedLog.TriggeredRules.Count == 0)
+                        {
+                            <span class="text-muted">Rule илрээгүй.</span>
+                        }
+                        else
+                        {
+                            @foreach (var rule in selectedLog.TriggeredRules)
+                            {
+                                <span class="badge text-bg-light border me-1 mb-1">@rule</span>
+                            }
+                        }
+                    </div>
+
+                    <div>
+                        <div class="fw-semibold mb-2">Дэлгэрэнгүй шалтгаан</div>
+                        <div class="border rounded p-3 bg-light detection-report-reason">@selectedLog.Reason</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    @if (selectedLog.IsSuspicious == true)
+                    {
+                        <a class="btn btn-primary" href="@BuildSuspiciousDetailHref(selectedLog.TransactionId)">Review дэлгэрэнгүй</a>
+                    }
+                    else
+                    {
+                        <a class="btn btn-outline-primary" href="@($"/admin/transactions?search={selectedLog.TransactionId}")">Гүйлгээ харах</a>
+                    }
+                    <button class="btn btn-outline-secondary" type="button" @onclick="CloseLogDetail">Хаах</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     private AdminSuspiciousDetectionReportDto report = new();
+    private AdminSuspiciousDetectionLogDto? selectedLog;
     private bool isLoading = true;
     private DateOnly effectiveStartDate;
     private DateOnly effectiveEndDate;
@@ -216,11 +294,14 @@ else if (!isLoading)
         effectiveEndDate = TryParseDate(EndDate) ?? today;
 
         report = await AdminService.GetSuspiciousDetectionReportAsync(
-            effectiveStartDate,
-            effectiveEndDate,
-            Search,
-            ReviewStatus,
-            SuspiciousOnly,
+            new AdminSuspiciousDetectionReportFilterDto
+            {
+                StartDate = effectiveStartDate,
+                EndDate = effectiveEndDate,
+                Search = Search,
+                ReviewStatus = ReviewStatus,
+                SuspiciousOnly = SuspiciousOnly
+            },
             Page);
 
         effectiveStartDate = report.Summary.StartDate;
@@ -253,6 +334,34 @@ else if (!isLoading)
         }
 
         return $"/admin/suspicious-detection-report?{string.Join("&", query)}";
+    }
+
+    private void OpenLogDetail(AdminSuspiciousDetectionLogDto item)
+    {
+        selectedLog = item;
+    }
+
+    private void CloseLogDetail()
+    {
+        selectedLog = null;
+    }
+
+    private string BuildSuspiciousDetailHref(long transactionId)
+    {
+        return $"/admin/suspicious-transactions/{transactionId}?returnUrl={Uri.EscapeDataString(CurrentReportUrl)}";
+    }
+
+    private string CurrentReportUrl => "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+
+    private static string BuildShortText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+
+        var trimmed = value.Trim();
+        return trimmed.Length <= 90 ? trimmed : trimmed[..90] + "...";
     }
 
     private IReadOnlyList<ChartDataPoint> RuleBreakdownChart => report.RuleSummaries

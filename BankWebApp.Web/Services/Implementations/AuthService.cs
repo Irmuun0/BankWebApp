@@ -105,6 +105,7 @@ public class AuthService : IAuthService
                 user.LockedUntil = MongoliaClock.ToMongoliaTime(lockedUntilUtc);
                 user.LockedUntilServerTick = clock.ServerTickMilliseconds + (long)LockDuration.TotalMilliseconds;
 
+                await _dbContext.SaveChangesAsync(cancellationToken);
                 await _securityEventService.LogAsync(
                     user.Id,
                     usernameOrEmail,
@@ -116,6 +117,7 @@ public class AuthService : IAuthService
                 return Failed($"Нууц үг 5 удаа буруу орсон тул эрх 15 минут түгжигдлээ. {user.LockedUntil:yyyy-MM-dd HH:mm} цагаас хойш дахин оролдоно уу.");
             }
 
+            await _dbContext.SaveChangesAsync(cancellationToken);
             await _securityEventService.LogAsync(
                 user.Id,
                 usernameOrEmail,
@@ -135,6 +137,7 @@ public class AuthService : IAuthService
         user.LastFailedLoginServerTick = null;
         ClearLock(user);
 
+        await _dbContext.SaveChangesAsync(cancellationToken);
         await _securityEventService.LogAsync(
             user.Id,
             usernameOrEmail,
@@ -149,7 +152,8 @@ public class AuthService : IAuthService
             UserId = user.Id,
             Username = user.Username,
             FullName = BuildFullName(user.FirstName, user.LastName),
-            Role = user.Role
+            Role = user.Role,
+            PasswordResetRequired = user.PasswordResetRequired
         };
     }
 
@@ -190,8 +194,7 @@ public class AuthService : IAuthService
 
     private static string? BuildFullName(string? firstName, string? lastName)
     {
-        var fullName = $"{firstName} {lastName}".Trim();
-        return string.IsNullOrWhiteSpace(fullName) ? null : fullName;
+        return UserDisplayNameFormatter.FormatOrNull(firstName, lastName);
     }
 
     private static bool VerifyPassword(string password, string passwordHash)

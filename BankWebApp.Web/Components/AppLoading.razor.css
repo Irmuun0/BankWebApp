@@ -1,0 +1,43 @@
+.app-loading {
+    display: inline-flex;
+    align-items: center;
+    gap: .85rem;
+    min-width: min(100%, 24rem);
+    padding: 1rem 1.1rem;
+    border: 1px solid rgba(148, 163, 184, .24);
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, .95);
+    box-shadow: 0 18px 42px rgba(15, 23, 42, .08);
+    color: #06133a;
+}
+
+.app-loading-spinner {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    border: 3px solid #e5ecf7;
+    border-top-color: #0b43a4;
+    animation: app-loading-spin .8s linear infinite;
+}
+
+.app-loading strong,
+.app-loading span {
+    display: block;
+}
+
+.app-loading strong {
+    font-size: .95rem;
+    font-weight: 800;
+}
+
+.app-loading span {
+    margin-top: .12rem;
+    color: #64748b;
+    font-size: .82rem;
+}
+
+@keyframes app-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

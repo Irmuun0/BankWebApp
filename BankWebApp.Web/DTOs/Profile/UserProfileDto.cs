@@ -10,6 +10,7 @@ public class UserProfileDto
     public string PhoneNumber { get; set; } = string.Empty;
     public string? EmergencyPhoneNumber { get; set; }
     public string Role { get; set; } = string.Empty;
+    public bool PasswordResetRequired { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public DateTime? PasswordChangedAt { get; set; }
 }

@@ -1,0 +1,161 @@
+@page "/admin/health"
+@attribute [Authorize(Roles = "ADMIN")]
+@rendermode InteractiveServer
+@inject IOperationalHealthService HealthService
+
+<PageTitle>Admin - Operational health</PageTitle>
+
+<section class="health-page">
+    <div class="health-toolbar">
+        <div>
+            <h2 class="health-title">Operational health</h2>
+            <p class="health-subtitle">Web app, database, AI service, Gemini болон ханшийн API readiness.</p>
+        </div>
+        <button class="btn btn-primary health-refresh" type="button" @onclick="RefreshAsync" disabled="@isLoading">
+            @(isLoading ? "Шалгаж байна..." : "Дахин шалгах")
+        </button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="alert @statusAlertClass mb-0" role="status">@statusMessage</div>
+    }
+
+    @if (isLoading)
+    {
+        <AppLoading Text="Системийн төлөв шалгаж байна..." Message="Web app, database, FastAPI, Gemini болон MongolBank service-үүдийг шалгаж байна." />
+    }
+
+    @if (report is not null)
+    {
+        <div class="health-summary @GetOverallClass(report.Status)">
+            <div>
+                <div class="health-summary-label">Overall status</div>
+                <div class="health-summary-status">@report.Status</div>
+                <div class="health-summary-meta">
+                    Generated: @report.GeneratedAt.ToString("yyyy-MM-dd HH:mm:ss") · Duration: @report.DurationMs ms · @report.Environment
+                </div>
+            </div>
+            <div class="health-summary-counts">
+                <span class="health-count good">@report.HealthyCount healthy</span>
+                <span class="health-count warn">@report.WarningCount warning</span>
+                <span class="health-count bad">@report.UnhealthyCount unhealthy</span>
+            </div>
+        </div>
+
+        <div class="health-grid">
+            @foreach (var component in report.Components)
+            {
+                <article class="health-card @GetCardClass(component.Status)">
+                    <div class="health-card-head">
+                        <div>
+                            <div class="health-card-title">@component.Name</div>
+                            <div class="health-card-key">@component.Key</div>
+                        </div>
+                        <span class="health-status-pill @GetPillClass(component.Status)">@component.Status</span>
+                    </div>
+
+                    <p class="health-message">@component.Message</p>
+                    @if (!string.IsNullOrWhiteSpace(component.Detail))
+                    {
+                        <p class="health-detail">@component.Detail</p>
+                    }
+
+                    <dl class="health-meta">
+                        <div>
+                            <dt>Critical</dt>
+                            <dd>@(component.IsCritical ? "Yes" : "No")</dd>
+                        </div>
+                        <div>
+                            <dt>Latency</dt>
+                            <dd>@component.DurationMs ms</dd>
+                        </div>
+                        <div>
+                            <dt>Checked</dt>
+                            <dd>@component.CheckedAt.ToString("HH:mm:ss")</dd>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(component.Endpoint))
+                        {
+                            <div class="health-endpoint">
+                                <dt>Endpoint</dt>
+                                <dd>@component.Endpoint</dd>
+                            </div>
+                        }
+                    </dl>
+                </article>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private OperationalHealthReportDto? report;
+    private bool isLoading = true;
+    private string? statusMessage;
+    private string statusAlertClass = "alert-info";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        isLoading = true;
+        statusMessage = "Health check эхэллээ. Түр хүлээнэ үү...";
+        statusAlertClass = "alert-info";
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield();
+
+        try
+        {
+            report = await HealthService.CheckAsync();
+            statusMessage = report.Status switch
+            {
+                HealthStatusNames.Healthy => "Бүх үндсэн service хэвийн байна.",
+                HealthStatusNames.Degraded => "Health check дууслаа. Зарим нэмэлт service warning/degraded төлөвтэй байна.",
+                HealthStatusNames.Unhealthy => "Health check дууслаа. Critical service алдаатай байна.",
+                _ => "Health check дууслаа."
+            };
+            statusAlertClass = report.Status switch
+            {
+                HealthStatusNames.Healthy => "alert-success",
+                HealthStatusNames.Unhealthy => "alert-danger",
+                _ => "alert-warning"
+            };
+        }
+        catch (Exception ex)
+        {
+            statusMessage = $"Health check хийх үед алдаа гарлаа: {ex.GetType().Name} - {ex.Message}";
+            statusAlertClass = "alert-danger";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string GetOverallClass(string status) => status switch
+    {
+        HealthStatusNames.Healthy => "health-summary-good",
+        HealthStatusNames.Degraded => "health-summary-warn",
+        HealthStatusNames.Unhealthy => "health-summary-bad",
+        _ => "health-summary-warn"
+    };
+
+    private static string GetCardClass(string status) => status switch
+    {
+        HealthStatusNames.Healthy => "health-card-good",
+        HealthStatusNames.Warning => "health-card-warn",
+        HealthStatusNames.Unhealthy => "health-card-bad",
+        _ => "health-card-warn"
+    };
+
+    private static string GetPillClass(string status) => status switch
+    {
+        HealthStatusNames.Healthy => "health-pill-good",
+        HealthStatusNames.Warning => "health-pill-warn",
+        HealthStatusNames.Unhealthy => "health-pill-bad",
+        _ => "health-pill-warn"
+    };
+}

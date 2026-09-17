@@ -1463,3 +1463,693 @@ body.phoebe-modal-open { overflow: hidden; }
         border-radius: .9rem;
     }
 }
+
+.admin-filter-card,
+.admin-table-shell,
+.empty-state {
+    border: 1px solid rgba(15, 23, 42, .08);
+    border-radius: 1.25rem;
+    background: rgba(255, 255, 255, .92);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, .06);
+}
+
+.admin-filter-card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.admin-filter-card .form-label {
+    margin-bottom: .35rem;
+    color: #475569;
+    font-size: .86rem;
+    font-weight: 700;
+}
+
+.admin-filter-card .form-control,
+.admin-filter-card .form-select {
+    min-height: 2.75rem;
+    border-color: rgba(15, 23, 42, .14);
+    border-radius: .85rem;
+}
+
+.admin-table-shell {
+    overflow: auto;
+}
+
+.admin-table-shell table {
+    margin-bottom: 0;
+}
+
+.admin-table-shell thead th {
+    white-space: nowrap;
+}
+
+.empty-state {
+    padding: 1.25rem;
+    color: #64748b;
+}
+
+.detection-report-summary {
+    max-width: 18rem;
+    color: #475569;
+    font-size: .9rem;
+    line-height: 1.35;
+    white-space: normal;
+}
+
+.detection-report-reason {
+    max-height: 18rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    line-height: 1.45;
+}
+
+.health-page {
+    display: grid;
+    gap: 1rem;
+}
+
+.health-toolbar,
+.health-summary,
+.health-card {
+    border: 1px solid rgba(148, 163, 184, .25);
+    border-radius: 1.25rem;
+    background: rgba(255, 255, 255, .92);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, .08);
+}
+
+.health-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+}
+
+.health-title {
+    margin: 0;
+    color: #06133f;
+    font-size: 1.2rem;
+    font-weight: 800;
+}
+
+.health-subtitle {
+    margin: .25rem 0 0;
+    color: #64748b;
+    font-size: .92rem;
+}
+
+.health-refresh {
+    white-space: nowrap;
+}
+
+.health-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.25rem;
+    border-left: 6px solid #2563eb;
+}
+
+.health-summary-good {
+    border-left-color: #16a34a;
+}
+
+.health-summary-warn {
+    border-left-color: #f59e0b;
+}
+
+.health-summary-bad {
+    border-left-color: #dc2626;
+}
+
+.health-summary-label,
+.health-card-key,
+.health-meta dt {
+    color: #64748b;
+    font-size: .76rem;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.health-summary-status {
+    color: #06133f;
+    font-size: 1.9rem;
+    font-weight: 900;
+    line-height: 1.1;
+}
+
+.health-summary-meta {
+    margin-top: .35rem;
+    color: #64748b;
+    font-size: .86rem;
+}
+
+.health-summary-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    justify-content: flex-end;
+}
+
+.health-count,
+.health-status-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: .35rem .65rem;
+    font-size: .82rem;
+    font-weight: 800;
+}
+
+.health-count.good,
+.health-pill-good {
+    background: rgba(22, 163, 74, .1);
+    color: #15803d;
+}
+
+.health-count.warn,
+.health-pill-warn {
+    background: rgba(245, 158, 11, .14);
+    color: #b45309;
+}
+
+.health-count.bad,
+.health-pill-bad {
+    background: rgba(220, 38, 38, .12);
+    color: #b91c1c;
+}
+
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.health-card {
+    display: grid;
+    gap: .85rem;
+    min-width: 0;
+    padding: 1rem;
+}
+
+.health-card-good {
+    border-top: 4px solid #16a34a;
+}
+
+.health-card-warn {
+    border-top: 4px solid #f59e0b;
+}
+
+.health-card-bad {
+    border-top: 4px solid #dc2626;
+}
+
+.health-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: .75rem;
+}
+
+.health-card-title {
+    color: #06133f;
+    font-size: 1rem;
+    font-weight: 850;
+}
+
+.health-message {
+    margin: 0;
+    color: #0f172a;
+    font-weight: 700;
+}
+
+.health-detail {
+    margin: -.35rem 0 0;
+    color: #64748b;
+    font-size: .9rem;
+}
+
+.health-meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .65rem;
+    margin: 0;
+}
+
+.health-meta div {
+    min-width: 0;
+}
+
+.health-meta dd {
+    margin: .15rem 0 0;
+    color: #0f172a;
+    font-size: .9rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.health-endpoint {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 700px) {
+    .health-toolbar,
+    .health-summary {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .health-summary-counts {
+        justify-content: flex-start;
+    }
+
+    .health-meta {
+        grid-template-columns: 1fr;
+    }
+}
+
+.phoebe-secondary-login-button {
+    border: 1px solid rgba(212, 165, 86, .55);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .84);
+    color: #071a52;
+    font-weight: 850;
+    padding: .72rem 1.15rem;
+    box-shadow: 0 12px 30px rgba(7, 26, 82, .08);
+}
+
+.phoebe-public-toast {
+    position: fixed;
+    top: 5.5rem;
+    right: 1.5rem;
+    z-index: 1200;
+    max-width: min(420px, calc(100vw - 2rem));
+    border-radius: 18px;
+    padding: 1rem 1.15rem;
+    font-weight: 750;
+    box-shadow: 0 22px 55px rgba(7, 26, 82, .14);
+    animation: publicToastOut 8s ease forwards;
+}
+
+.phoebe-public-toast-success {
+    border: 1px solid rgba(22, 163, 74, .25);
+    background: #dcfce7;
+    color: #14532d;
+}
+
+.phoebe-public-toast-error {
+    border: 1px solid rgba(220, 38, 38, .25);
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.phoebe-registration-dialog {
+    position: relative;
+    width: min(980px, calc(100vw - 48px));
+    max-width: none;
+    max-height: calc(100vh - 48px);
+    padding: 1.45rem 1.65rem 1.35rem;
+    overflow: hidden;
+}
+
+.phoebe-registration-dialog::before {
+    content: "";
+    position: absolute;
+    inset: -12% auto auto 50%;
+    width: min(560px, 76vw);
+    aspect-ratio: 2.55 / 1;
+    background: url("/images/brand/phoebe-logo-login.png") center / contain no-repeat;
+    opacity: .08;
+    filter: blur(3px);
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.phoebe-registration-dialog .phoebe-login-form,
+.phoebe-registration-dialog .phoebe-login-close {
+    position: relative;
+    z-index: 1;
+}
+
+.phoebe-registration-dialog .phoebe-login-logo {
+    display: none;
+}
+
+.phoebe-login-form h4 {
+    margin: 0 0 .25rem;
+    color: var(--phoebe-navy);
+    font-size: 1.15rem;
+    font-weight: 900;
+    line-height: 1.25;
+}
+
+.phoebe-registration-help {
+    margin: -.15rem 0 .85rem;
+    color: #64748b;
+    font-size: .86rem;
+    line-height: 1.55;
+}
+
+.phoebe-registration-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .65rem .85rem;
+}
+
+.phoebe-registration-grid label {
+    min-width: 0;
+}
+
+.field-hint {
+    color: #64748b;
+    font-size: .74rem;
+    font-weight: 650;
+}
+
+.phoebe-login-form select,
+.phoebe-login-form textarea {
+    width: 100%;
+    border: 1px solid rgba(14, 60, 153, 0.16);
+    border-radius: 16px;
+    background: #fff;
+    color: #0f172a;
+    padding: .78rem .9rem;
+    font: inherit;
+}
+
+.phoebe-login-form select:focus,
+.phoebe-login-form textarea:focus {
+    border-color: var(--phoebe-blue);
+    box-shadow: 0 0 0 4px rgba(14, 60, 153, 0.12);
+    outline: none;
+}
+
+.national-id-control {
+    display: grid;
+    grid-template-columns: 72px 72px 1fr;
+    gap: .5rem;
+}
+
+.national-id-control select,
+.national-id-control input {
+    min-width: 0;
+    min-height: 50px;
+}
+
+.phoebe-registration-submit-row {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .85rem;
+}
+
+.phoebe-registration-submit-row .phoebe-login-submit {
+    width: min(360px, 100%);
+    margin: 0;
+    padding-block: .95rem;
+}
+
+.registration-filter-card {
+    margin: 1rem 0;
+    border: 1px solid rgba(148, 163, 184, .25);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, .92);
+    padding: 1.1rem;
+    box-shadow: 0 22px 60px rgba(15, 23, 42, .06);
+}
+
+.registration-credential-once {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    margin: 1rem 0;
+    padding: 1rem 1.1rem;
+    border: 1px solid #f0c45a;
+    border-radius: 16px;
+    background: #fff9e8;
+    color: #3f2d04;
+}
+
+.registration-credential-once p {
+    margin: .35rem 0 0;
+    color: #6b541b;
+}
+
+.registration-credential-once dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(130px, 1fr));
+    gap: .65rem;
+    margin: 0;
+}
+
+.registration-credential-once dl > div {
+    padding: .65rem .8rem;
+    border: 1px solid rgba(180, 132, 22, .25);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.registration-credential-once dt {
+    color: #7a621f;
+    font-size: .78rem;
+    font-weight: 800;
+}
+
+.registration-credential-once dd {
+    margin: .2rem 0 0;
+    font-weight: 850;
+}
+
+.registration-filter-grid {
+    display: grid;
+    grid-template-columns: 1.4fr .8fr .8fr .8fr .55fr auto;
+    gap: .85rem;
+    align-items: end;
+}
+
+@media (max-width: 720px) {
+    .registration-credential-once {
+        grid-template-columns: 1fr;
+    }
+
+    .registration-credential-once dl {
+        grid-template-columns: 1fr;
+    }
+}
+
+.registration-filter-grid label,
+.registration-review-form label {
+    display: grid;
+    gap: .35rem;
+    min-width: 0;
+    color: #475569;
+    font-weight: 750;
+}
+
+.registration-filter-grid input,
+.registration-filter-grid select,
+.registration-review-form textarea {
+    width: 100%;
+    border: 1px solid #dbe4f0;
+    border-radius: 14px;
+    background: #fff;
+    color: #0f172a;
+    padding: .75rem .9rem;
+}
+
+.registration-filter-actions,
+.registration-review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+}
+
+.registration-status {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: .28rem .65rem;
+    font-size: .82rem;
+    font-weight: 850;
+}
+
+.registration-status-pending {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.registration-status-approved {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.registration-status-rejected {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.registration-status-needs_info {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.registration-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+}
+
+.registration-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, .48);
+    backdrop-filter: blur(8px);
+}
+
+.registration-modal-panel {
+    position: relative;
+    z-index: 1;
+    width: min(920px, calc(100vw - 3rem));
+    max-height: calc(100vh - 3rem);
+    overflow: auto;
+    background: #f8fafc;
+    border: 1px solid rgba(226, 232, 240, .9);
+    border-radius: 28px;
+    padding: 1.4rem;
+    box-shadow: 0 30px 90px rgba(15, 23, 42, .28);
+}
+
+.registration-modal-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.registration-modal-head h3 {
+    margin: .15rem 0;
+    color: #06133f;
+    font-size: 1.4rem;
+    font-weight: 900;
+}
+
+.registration-kicker,
+.registration-detail-grid span,
+.registration-note span,
+.registration-decision-message span {
+    color: #64748b;
+    font-size: .82rem;
+    font-weight: 850;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.registration-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border: 1px solid #dbe4f0;
+    border-radius: 50%;
+    background: #fff;
+    color: #0f172a;
+    font-size: 1.5rem;
+    text-decoration: none;
+}
+
+.registration-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .8rem;
+}
+
+.registration-detail-grid div,
+.registration-note,
+.registration-decision-message,
+.registration-review-form {
+    display: grid;
+    gap: .28rem;
+    border: 1px solid rgba(148, 163, 184, .24);
+    border-radius: 18px;
+    background: #fff;
+    padding: 1rem;
+}
+
+.registration-detail-grid strong,
+.registration-note p,
+.registration-decision-message p {
+    margin: .25rem 0 0;
+    color: #0f172a;
+    overflow-wrap: anywhere;
+}
+
+.registration-note,
+.registration-decision-message,
+.registration-review-form {
+    margin-top: .9rem;
+}
+
+.registration-review-form {
+    display: grid;
+    gap: .85rem;
+}
+
+.pagination-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .75rem;
+    margin: 1rem 0;
+}
+
+@media (max-width: 900px) {
+    .registration-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .phoebe-registration-grid,
+    .registration-detail-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .phoebe-registration-dialog {
+        width: min(620px, 96vw);
+        max-height: 92vh;
+        overflow: auto;
+    }
+
+    .national-id-control {
+        grid-template-columns: 64px 64px 1fr;
+    }
+
+    .registration-modal {
+        align-items: flex-end;
+        padding: .75rem;
+    }
+
+    .registration-modal-panel {
+        width: 100%;
+        max-height: 92vh;
+        border-radius: 24px 24px 0 0;
+    }
+}
+
+@keyframes publicToastOut {
+    0%, 84% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-8px);
+        pointer-events: none;
+    }
+}

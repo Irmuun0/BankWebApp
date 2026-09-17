@@ -1,11 +1,14 @@
 @using BankWebApp.Web.DTOs.Ai
 @using BankWebApp.Web.DTOs.ExchangeRates
 @rendermode InteractiveServer
+@implements IDisposable
 @inject IExchangeRateService ExchangeRateService
 @inject IGeminiAnalysisService GeminiService
 @inject ICurrentUserService CurrentUser
 @inject IAccountService AccountService
 @inject ITransactionService TransactionService
+@inject IUiOverlayCoordinator OverlayCoordinator
+@inject ILogger<FloatingExchangeRates> Logger
 
 <div class="floating-rate-widget">
     @if (showChatPanel)
@@ -72,6 +75,8 @@
 
                 <form class="floating-chat-form" @onsubmit="SendChatAsync" @onsubmit:preventDefault="true">
                     <textarea @bind="chatQuestion"
+                              @bind:event="oninput"
+                              data-ai-chat-submit-on-enter
                               rows="2"
                               maxlength="700"
                               placeholder="@ChatPlaceholder"
@@ -168,6 +173,9 @@
 </div>
 
 @code {
+    private const string RatesOverlayKey = "exchange-rates";
+    private const string ChatOverlayKey = "chubi-chat";
+    private static readonly TimeSpan ChatRequestTimeout = TimeSpan.FromSeconds(45);
     private static readonly string[] VisibleCurrencies = ["USD", "EUR", "JPY", "CHF", "GBP", "HKD", "CNY", "KRW", "CAD", "AUD", "SGD", "NZD", "XAU", "XAG"];
     private static readonly HashSet<string> VisibleCurrencySet = VisibleCurrencies.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -183,6 +191,7 @@
     private string chatQuestion = string.Empty;
     private string? chatError;
     private ChatMode chatMode = ChatMode.BankInfo;
+    private CancellationTokenSource? chatRequestCancellation;
 
     private bool CanSwitchMode => CurrentUser.IsAuthenticated && CurrentUser.IsInRole("USER");
     private bool ShowModePicker => CanSwitchMode && chatMode == ChatMode.None;
@@ -208,6 +217,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        OverlayCoordinator.OverlayActivated += HandleOverlayActivated;
         ResetChat(ChatMode.BankInfo);
 
         var allRates = await ExchangeRateService.GetMongolBankMntRatesAsync();
@@ -226,7 +236,9 @@
         showPanel = !showPanel;
         if (showPanel)
         {
+            OverlayCoordinator.Activate(RatesOverlayKey);
             showChatPanel = false;
+            CancelPendingChatRequest();
         }
     }
 
@@ -235,10 +247,12 @@
         showChatPanel = !showChatPanel;
         if (!showChatPanel)
         {
+            CancelPendingChatRequest();
             return;
         }
 
         showPanel = false;
+        OverlayCoordinator.Activate(ChatOverlayKey);
         chatError = null;
         chatQuestion = string.Empty;
 
@@ -291,6 +305,7 @@
         chatError = null;
         isChatSending = true;
         chatMessages.Add(new ChatMessage("user", question));
+        await InvokeAsync(StateHasChanged);
 
         var history = chatMessages
             .Select(message => new PublicBankChatMessageDto
@@ -300,42 +315,67 @@
             })
             .ToList();
 
-        var result = chatMode == ChatMode.PersonalFinance
-            ? await SendFinanceChatAsync(question, history)
-            : await GeminiService.AskPublicBankInfoQuestionAsync(question, history);
+        CancelPendingChatRequest();
+        var requestCancellation = new CancellationTokenSource(ChatRequestTimeout);
+        chatRequestCancellation = requestCancellation;
 
-        if (result.Success && !string.IsNullOrWhiteSpace(result.Answer))
+        try
         {
-            chatMessages.Add(new ChatMessage("assistant", result.Answer));
-        }
-        else
-        {
-            chatError = result.ErrorMessage ?? "Chubi AI хариу өгөх боломжгүй байна.";
-        }
+            var result = chatMode == ChatMode.PersonalFinance
+                ? await SendFinanceChatAsync(question, history, requestCancellation.Token)
+                : await GeminiService.AskPublicBankInfoQuestionAsync(question, history, cancellationToken: requestCancellation.Token);
 
-        isChatSending = false;
+            if (result.Success && !string.IsNullOrWhiteSpace(result.Answer))
+            {
+                chatMessages.Add(new ChatMessage("assistant", result.Answer));
+            }
+            else
+            {
+                chatError = NormalizeChatError(result.ErrorMessage);
+            }
+        }
+        catch (OperationCanceledException) when (requestCancellation.IsCancellationRequested)
+        {
+            chatError = "AI хариу өгөх хугацаа хэтэрлээ. Түр хүлээгээд дахин оролдоно уу.";
+        }
+        catch (Exception exception)
+        {
+            Logger.LogWarning(exception, "Chubi AI chat request failed.");
+            chatError = "Chubi AI-д холбогдох үед алдаа гарлаа. Дахин оролдоно уу.";
+        }
+        finally
+        {
+            if (ReferenceEquals(chatRequestCancellation, requestCancellation))
+            {
+                chatRequestCancellation = null;
+            }
+
+            requestCancellation.Dispose();
+            isChatSending = false;
+        }
     }
 
     private async Task<(bool Success, string? Answer, string? ErrorMessage)> SendFinanceChatAsync(
         string question,
-        IReadOnlyList<PublicBankChatMessageDto> history)
+        IReadOnlyList<PublicBankChatMessageDto> history,
+        CancellationToken cancellationToken)
     {
         if (CurrentUser.UserId is null)
         {
             return (false, null, "Санхүүгийн тайлан авахын тулд хэрэглэгчээр нэвтэрсэн байх шаардлагатай.");
         }
 
-        var context = await BuildFinanceContextAsync(CurrentUser.UserId.Value);
-        return await GeminiService.AskUserFinanceQuestionAsync(question, context, history);
+        var context = await BuildFinanceContextAsync(CurrentUser.UserId.Value, cancellationToken);
+        return await GeminiService.AskUserFinanceQuestionAsync(question, context, history, cancellationToken: cancellationToken);
     }
 
-    private async Task<UserFinanceChatContextDto> BuildFinanceContextAsync(long userId)
+    private async Task<UserFinanceChatContextDto> BuildFinanceContextAsync(long userId, CancellationToken cancellationToken)
     {
         var today = MongoliaClock.Today;
         var start30 = today.AddDays(-30);
         var start15 = today.AddDays(-15);
-        var accounts = await AccountService.GetMyAccountsAsync(userId);
-        var transactions = await TransactionService.GetMyTransactionsAsync(userId, start30, today, 500);
+        var accounts = await AccountService.GetMyAccountsAsync(userId, cancellationToken);
+        var transactions = await TransactionService.GetMyTransactionsAsync(userId, start30, today, 500, cancellationToken);
         var recentTransactions = transactions
             .OrderByDescending(transaction => transaction.CreatedAt)
             .ThenByDescending(transaction => transaction.Id)
@@ -436,6 +476,64 @@
         return string.Equals(accountType, "CHECKING", StringComparison.OrdinalIgnoreCase)
             ? "Харилцах"
             : accountType;
+    }
+
+    private static string NormalizeChatError(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            return "Chubi AI хариу өгөх боломжгүй байна. Дахин оролдоно уу.";
+        }
+
+        if (errorMessage.Contains("TaskCanceledException", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("operation was canceled", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            return "AI хариу өгөх хугацаа хэтэрлээ. Түр хүлээгээд дахин оролдоно уу.";
+        }
+
+        return "Chubi AI-д холбогдох үед алдаа гарлаа. Түр хүлээгээд дахин оролдоно уу.";
+    }
+
+    private void HandleOverlayActivated(string overlayKey)
+    {
+        var keepRatesOpen = string.Equals(overlayKey, RatesOverlayKey, StringComparison.Ordinal);
+        var keepChatOpen = string.Equals(overlayKey, ChatOverlayKey, StringComparison.Ordinal);
+        var stateChanged = false;
+
+        if (showPanel && !keepRatesOpen)
+        {
+            showPanel = false;
+            stateChanged = true;
+        }
+
+        if (showChatPanel && !keepChatOpen)
+        {
+            showChatPanel = false;
+            CancelPendingChatRequest();
+            stateChanged = true;
+        }
+
+        if (stateChanged)
+        {
+            _ = InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void CancelPendingChatRequest()
+    {
+        if (chatRequestCancellation is { IsCancellationRequested: false })
+        {
+            chatRequestCancellation.Cancel();
+        }
+    }
+
+    public void Dispose()
+    {
+        OverlayCoordinator.OverlayActivated -= HandleOverlayActivated;
+        CancelPendingChatRequest();
+        chatRequestCancellation?.Dispose();
+        chatRequestCancellation = null;
     }
 
     private static string GetCurrencyName(string currencyCode)
