@@ -1,3 +1,4 @@
+using static BankWebApp.Web.Helpers.Money;
 using System.Text.Json;
 using BankWebApp.Web.Data;
 using BankWebApp.Web.Data.Entities;
@@ -107,6 +108,7 @@ public class TransactionService : ITransactionService
         CancellationToken cancellationToken = default)
     {
         var receiverAccountNumber = dto.ToAccountNumber.Trim();
+        // SQL decimal(18,2)-т багтах дүнг UI-гаас үл хамааран сервер дээр баталгаажуулна.
         const decimal maximumTransactionAmount = 9999999999999999.99m;
         var amount = dto.Amount;
         var description = dto.Description?.Trim();
@@ -121,8 +123,7 @@ public class TransactionService : ITransactionService
             return Failed("Хүлээн авах дансны дугаараа оруулна уу.");
         }
 
-        if (receiverAccountNumber.Length != 10 ||
-            !receiverAccountNumber.All(character => character is >= '0' and <= '9'))
+        if (!TransactionInput.IsValidAccountNumber(receiverAccountNumber))
         {
             return Failed("Хүлээн авах дансны дугаар 10 оронтой тоо байх ёстой.");
         }
@@ -147,11 +148,13 @@ public class TransactionService : ITransactionService
             return Failed("Гүйлгээний утга оруулна уу.");
         }
 
+        // Үлдэгдэл болон өдрийн лимитийг зэрэг хүсэлтээс хамгаалж, шилжүүлгийг нэг transaction-д хадгална.
         await using var dbTransaction = await _dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
 
         try
         {
             var fromAccount = await _dbContext.Accounts
+                // Request-ийн account ID-д шууд итгэхгүй: одоогийн хэрэглэгчийн идэвхтэй данс байх ёстой.
                 .FirstOrDefaultAsync(account =>
                     account.Id == dto.FromAccountId &&
                     account.UserId == currentUserId &&
@@ -274,6 +277,7 @@ public class TransactionService : ITransactionService
 
             await dbTransaction.CommitAsync(cancellationToken);
 
+            // Шилжүүлэг commit болсон хойно эрсдэл шалгана; AI сервисийн саатал шилжүүлгийг буцаахгүй.
             await ProcessSuspiciousDetectionAsync(currentUserId, transaction.Id, cancellationToken);
 
             return (true, null, transaction.Id);
@@ -747,7 +751,7 @@ public class TransactionService : ITransactionService
         }
 
         var rawCreditedAmount = amount * exchangeRate.Rate;
-        var creditedAmount = decimal.Truncate(rawCreditedAmount * 100m) / 100m;
+        var creditedAmount = TruncateMoney(rawCreditedAmount);
         var roundingDifference = decimal.Round(rawCreditedAmount - creditedAmount, 4, MidpointRounding.AwayFromZero);
         var fxIncome = BuildFxIncomeLog(sourceCurrency, targetCurrency, amount, creditedAmount, quote);
 
@@ -851,11 +855,6 @@ public class TransactionService : ITransactionService
             Source = quote.Source,
             RateDate = quote.RateDate
         };
-    }
-
-    private static decimal TruncateMoney(decimal value)
-    {
-        return decimal.Truncate(value * 100m) / 100m;
     }
 
     private static (bool Success, string? ErrorMessage, long? TransactionId) Failed(string message)

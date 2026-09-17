@@ -425,24 +425,3 @@
         }
     })();
 </script>
-
-@code {
-    [SupplyParameterFromQuery]
-    public string? Error { get; set; }
-
-    [SupplyParameterFromQuery]
-    public string? ReturnUrl { get; set; }
-
-    [SupplyParameterFromQuery(Name = "login")]
-    public string? LoginMode { get; set; }
-
-    [SupplyParameterFromQuery(Name = "registrationSuccess")]
-    public string? RegistrationSuccess { get; set; }
-
-    [SupplyParameterFromQuery(Name = "registrationError")]
-    public string? RegistrationError { get; set; }
-
-    private string ReturnUrlOrDashboard => string.IsNullOrWhiteSpace(ReturnUrl) ? "/dashboard" : ReturnUrl;
-
-    private string ReturnUrlOrAdminDashboard => string.IsNullOrWhiteSpace(ReturnUrl) ? "/admin/dashboard" : ReturnUrl;
-}

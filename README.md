@@ -1,5 +1,9 @@
 # Phoebe Bank Web App
 
+Кодын бүтэц, request-ийн урсгал, refactoring-ийн тайлбар, тест ажиллуулах заавар: [Код унших заавар](REFACTORING.md).
+
+Технологи, frontend/backend, өгөгдлийн урсгал, файл бүрийн үүрэг болон дадлагын хамгаалалтын 30 асуулт: [Архитектурын дэлгэрэнгүй гарын авлага](ARCHITECTURE_GUIDE_MN.md).
+
 Phoebe Bank нь ASP.NET Core Blazor дээр хөгжүүлсэн банкны веб системийн дадлагын төсөл. Систем нь хэрэглэгчийн банкны үндсэн workflow, админ удирдлага, валютын ханш, AI/rule-based suspicious transaction detection, Gemini AI туслах, audit/security log зэрэг хэсгүүдтэй.
 
 ## Төслийн бүтэц
